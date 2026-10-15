@@ -13,7 +13,7 @@ function aliases(ops){
 }
 function resolveAuthor(id,ops){return aliases(ops)[id]||id;}
 function project(ops){
- const memories=new Map(),categories=new Set(defaults),profiles=Object.create(null),settings=Object.create(null),letters=new Map(),games=new Map(),results=[];
+ const memories=new Map(),mediaStates=new Map(),categories=new Set(defaults),profiles=Object.create(null),settings=Object.create(null),letters=new Map(),games=new Map(),results=[];
  for(const [id,p]of Object.entries(people))profiles[id]={...p};
  const identities=aliases(ops);
  for(const raw of ordered(ops)){
@@ -24,6 +24,7 @@ function project(ops){
   if(op.kind==='letter')letters.set(op.activity,{id:op.activity,...op.data,author:op.author,name:op.name,time:op.time});
   if(op.kind==='game')games.set(op.activity,{id:op.activity,...op.data,author:op.author,name:op.name,time:op.time});
   if(op.kind==='game-result')results.push({id:op.id,game:op.activity,author:op.author,name:op.name,time:op.time,...op.data});
+  if(op.kind==='media-state')mediaStates.set(JSON.stringify([op.activity,op.data.mediaId]),op.data.removed);
   if(op.kind==='create'&&!memories.has(op.activity)){
    const a={id:op.activity,...op.data,author:op.author,ratings:{},media:[]};a.section=sectionOf(a);a.date=a.date||'';memories.set(op.activity,a);
    if(a.section==='experiences')categories.add(a.category);
@@ -32,6 +33,7 @@ function project(ops){
   if(op.kind==='rating')a.ratings[op.author]={...op.data,name:op.name};
   if(op.kind==='media'&&!a.media.some(m=>m.id===op.id))a.media.push({id:op.id,...op.data});
  }
+ for(const a of memories.values()){a.removedMedia=a.media.filter(m=>mediaStates.get(JSON.stringify([a.id,m.id]))===true);a.media=a.media.filter(m=>mediaStates.get(JSON.stringify([a.id,m.id]))!==true);}
  return {memories:[...memories.values()].sort((a,b)=>(b.date||'').localeCompare(a.date||'')||a.title.localeCompare(b.title)),categories:[...categories],profiles,settings,identities,letters:[...letters.values()].sort((a,b)=>b.time-a.time),games:[...games.values()].sort((a,b)=>b.time-a.time),results};
 }
 function validDate(v){if(v==='')return true;if(typeof v!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(v))return false;const d=new Date(v+'T12:00:00Z');return !Number.isNaN(d.valueOf())&&d.toISOString().slice(0,10)===v;}
@@ -43,6 +45,7 @@ function validateOp(o){
  if(o.kind==='create')ok=text(d.title,120)&&!!d.title.trim()&&text(d.category,60)&&!!d.category.trim()&&validDate(d.date)&&(!d.section||Object.hasOwn(sections,d.section))&&(!d.endDate||validDate(d.endDate)&&!!d.date&&d.endDate>=d.date)&&(!d.description||text(d.description,5000))&&(!d.location||text(d.location,160))&&(!d.recipient||text(d.recipient,100));
  if(o.kind==='rating')ok=Number.isInteger(d.score)&&d.score>=1&&d.score<=10&&text(d.comment,2000);
  if(o.kind==='media')ok=text(d.url,40*1024*1024)&&/^data:(image\/(jpeg|png|webp)|video\/(mp4|quicktime|webm));base64,[A-Za-z0-9+/=]+$/.test(d.url)&&text(d.type,80)&&text(d.name,300);
+ if(o.kind==='media-state')ok=text(d.mediaId,120)&&!!d.mediaId&&typeof d.removed==='boolean';
  if(o.kind==='category')ok=text(d.name,60)&&!!d.name.trim();
  if(o.kind==='identity')ok=text(d.legacy,120)&&!!d.legacy&&!Object.hasOwn(people,d.legacy)&&text(d.person,120)&&!!d.person&&d.person!==d.legacy&&o.author===d.person;
  if(o.kind==='profile')ok=text(d.firstName,40)&&!!d.firstName.trim()&&text(d.lastName,60)&&image(d.photo);
