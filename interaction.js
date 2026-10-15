@@ -19,6 +19,7 @@ function counterParts(settings,now=Date.now()){
  const start=saved?.instant||startInstant(date,'00:00'),elapsed=Math.max(0,Math.floor((now-Date.parse(start))/1000));
  return {days:Math.floor(elapsed/86400),hours:Math.floor(elapsed/3600)%24,minutes:Math.floor(elapsed/60)%60,seconds:elapsed%60};
 }
-root.DiaryInteraction={pages,swipePage,startInstant,counterParts};
+function navIndex(x,left,right,count){return Math.max(0,Math.min(count-1,Math.floor((x-left)/Math.max(1,right-left)*count)));}
+root.DiaryInteraction={pages,swipePage,startInstant,counterParts,navIndex};
 if(typeof module!=='undefined')module.exports=root.DiaryInteraction;
 })(globalThis);
