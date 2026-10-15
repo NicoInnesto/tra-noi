@@ -1,7 +1,7 @@
 'use strict';
 window.diaryBoot=window.diaryBoot||{phase:'Caricamento del diario',ready:false};
-const VERSION=15;
-const WIRE_VERSION=15;
+const VERSION=17;
+const WIRE_VERSION=17;
 const uuid=()=>crypto.randomUUID?crypto.randomUUID():([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g,c=>(c^crypto.getRandomValues(new Uint8Array(1))[0]&15>>c/4).toString(16));
 const $=id=>document.getElementById(id);
 const storagePrefix='tra-noi:'+new URL('./',location.href).pathname+':';
@@ -42,6 +42,7 @@ const gameTypes={
  truefalse:{title:'Vero o falso',subtitle:'A te la parola, poi ne parliamo.',icon:'check'}
 };
 let diagnosticTimer,connectionBusy=false,localIceServers=[];
+let accessPolicy=null,adminVault=null,adminKey=null;
 let author=settingsStorage.getItem('diary-author');
 if(!author){author=uuid();settingsStorage.setItem('diary-author',author);}
 let myName=settingsStorage.getItem('diary-name')||'Io';
@@ -57,7 +58,10 @@ function store(name,value){return new Promise((resolve,reject)=>{const tx=db.tra
 async function init(){
  window.diaryBoot.phase='Apertura della memoria locale';
  db=await new Promise((resolve,reject)=>{const r=indexedDB.open(storagePrefix+'archive',2);r.onupgradeneeded=()=>{if(!r.result.objectStoreNames.contains('ops'))r.result.createObjectStore('ops',{keyPath:'id'});if(!r.result.objectStoreNames.contains('acks'))r.result.createObjectStore('acks',{keyPath:'id'});if(!r.result.objectStoreNames.contains('meta'))r.result.createObjectStore('meta',{keyPath:'id'});};r.onblocked=()=>{window.diaryBoot.phase='Chiudi le altre schede del diario e riprova';$('bootStatus').hidden=false;$('bootStatus').textContent=window.diaryBoot.phase;};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});
+ const accessRow=await new Promise((resolve,reject)=>{const r=db.transaction('meta').objectStore('meta').get('administration');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});
+ if(accessRow?.policy){accessPolicy=await DiaryAccess.checkPolicy(accessRow.policy);adminVault=accessRow.vault||null;}
  for(const name of ['ops','acks']){const rows=await new Promise((resolve,reject)=>{const r=db.transaction(name).objectStore(name).getAll();r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});if(name==='ops')ops=rows;else acks=new Set(rows.map(x=>x.id));}
+ for(const op of ops){validateOp(op);await DiaryAccess.authorize(op,accessPolicy);}
  db.onversionchange=()=>{db.close();toast('È disponibile un aggiornamento. Riapri il diario.');};
  const storedIdentity=await new Promise((resolve,reject)=>{const r=db.transaction('meta').objectStore('meta').get('identity');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});
  const savedPerson=storedIdentity?.person||settingsStorage.getItem('diary-person');
@@ -86,6 +90,7 @@ function render(){
  $('storage').textContent='Archivio locale: circa '+(ops.reduce((n,o)=>n+new Blob([JSON.stringify(o)]).size,0)/1024/1024).toFixed(1)+' MB. Gli originali in Foto occupano spazio separatamente.';
  tickCounter();
  if(active)renderDetail();
+ updateAdministrationUI();
  updateInstallUI();
 }
 function renderHome(){
@@ -186,6 +191,8 @@ async function mediaURL(f,maxDimension=0){
 async function addOp(kind,activity,data,opAuthor=author){
  if(!Object.hasOwn(people,author))throw Error('Scegli prima il profilo di questo dispositivo');
  const time=ops.reduce((n,o)=>Math.max(n,o.time+1),Date.now()),op={id:uuid(),kind,activity,data,author:opAuthor,name:personName(opAuthor),time};validateOp(op);
+ if(['profile','identity'].includes(kind)){op.actor=author;if(author==='one'&&accessPolicy){if(!adminKey)throw Error('Sblocca prima l’amministrazione');Object.assign(op,await DiaryAccess.sign(op,adminKey));}if(author==='two'&&(opAuthor!=='two'||kind==='identity'))throw Error('Puoi modificare soltanto il tuo profilo');}
+ await DiaryAccess.authorize(op,accessPolicy);
  try{await store('ops',op);ops.push(op);render();if(channel?.readyState==='open'&&peerPerson&&syncStarted)send({type:'op',op}).catch(()=>toast('Trasferimento interrotto: il contenuto resta qui'));}catch(e){throw Error('Salvataggio non riuscito. Controlla lo spazio disponibile.');}
 }
 function validateOp(op){return DiaryModel.validateOp(op);}
@@ -200,7 +207,7 @@ function reportStats(){reportDiagnostic('controllo locale');}
 function makePeer(){closePeer();if(!window.RTCPeerConnection)throw Error('Questo browser non supporta il collegamento. Usa Safari aggiornato.');const created=new RTCPeerConnection({iceServers:localIceServers});pc=created;created.ondatachannel=e=>{if(pc===created)bindChannel(e.channel);};created.onconnectionstatechange=()=>{if(pc!==created)return;reportDiagnostic('connection');if(created.connectionState==='failed')connection('Connessione diretta non riuscita · i ricordi restano qui');else if(created.connectionState==='disconnected')connection('Connessione in pausa · tentativo di ripresa…');};created.oniceconnectionstatechange=()=>{if(pc===created)reportDiagnostic('ice');};created.onicecandidateerror=e=>{if(pc===created)reportDiagnostic('candidate-error',{code:e.errorCode,message:e.errorText});};diagnosticTimer=setInterval(reportStats,5000);reportDiagnostic('start');return created;}
 function bindChannel(c){
  channel=c;peerPerson='';syncStarted=false;c.bufferedAmountLowThreshold=65536;
- c.onopen=async()=>{if(channel!==c)return;reportDiagnostic('channel-open');clearInterval(pollTimer);connection('Verifica dei due profili…',true);try{await send({type:'hello',protocol:WIRE_VERSION,person:author,name:personName(),ticket:sessionTicket});c.helloTimer=setTimeout(()=>{if(channel===c&&!peerPerson){closePeer();connection('Aggiorna il diario su entrambi i dispositivi e riprova');}},10000);}catch{connection('Trasferimento interrotto');}};
+ c.onopen=async()=>{if(channel!==c)return;reportDiagnostic('channel-open');clearInterval(pollTimer);connection('Verifica dei due profili…',true);try{await send({type:'hello',protocol:WIRE_VERSION,person:author,name:personName(),ticket:sessionTicket,policy:accessPolicy});c.helloTimer=setTimeout(()=>{if(channel===c&&!peerPerson){closePeer();connection('Aggiorna il diario su entrambi i dispositivi e riprova');}},10000);}catch{connection('Trasferimento interrotto');}};
  c.onclose=()=>{clearTimeout(c.helloTimer);if(channel===c){reportDiagnostic('channel-closed');connection('Diario locale · non collegato');}};
  let receive=Promise.resolve();c.onmessage=e=>{receive=receive.then(()=>{if(channel===c)return receiveFrame(e.data);}).catch(err=>toast('Ricezione non completata: '+err.message));};
 }
@@ -218,14 +225,15 @@ async function receiveFrame(raw){
  if(message.type==='hello'||message.type==='hello-ok'){
   if(message.protocol!==WIRE_VERSION||message.ticket!==sessionTicket||!sessionTicket||!Object.hasOwn(people,message.person)){closePeer();connection('Aggiorna il diario su entrambi i dispositivi prima di collegarli');return;}
   if(message.person===author){closePeer();connection('Entrambi i dispositivi sono di '+personName()+'. Assegna Persona 1 a un dispositivo e Persona 2 all’altro.');return;}
+  if(message.policy)await adoptPolicy(message.policy);
   peerPerson=message.person;peerName=message.name||personName(peerPerson);clearTimeout(channel.helloTimer);
   await store('meta',{id:'partner',person:peerPerson});connection('Collegato con '+peerName,true);
-  if(message.type==='hello')await send({type:'hello-ok',protocol:WIRE_VERSION,person:author,ticket:sessionTicket});
+  if(message.type==='hello')await send({type:'hello-ok',protocol:WIRE_VERSION,person:author,ticket:sessionTicket,policy:accessPolicy});
   else await syncSnapshot();
   return;
  }
  if(!peerPerson)throw Error('I profili non sono ancora stati verificati');
- if(message.type==='op'){const op=message.op;validateOp(op);if(!ops.some(o=>o.id===op.id)){await store('ops',op);ops.push(op);render();}await send({type:'ack',id:op.id});}
+ if(message.type==='op'){const op=message.op;validateOp(op);await DiaryAccess.authorize(op,accessPolicy);if(!ops.some(o=>o.id===op.id)){await store('ops',op);ops.push(op);render();}await send({type:'ack',id:op.id});}
  if(message.type==='ack'&&ops.some(o=>o.id===message.id)){await store('acks',{id:message.id});acks.add(message.id);render();}
  if(message.type==='sync-done')connection('Collegato con '+peerName+' · ricordi ricevuti',true);
 }
@@ -277,21 +285,23 @@ $('scanCode').onclick=guarded(async()=>{
  };scan();
 });
 
-let profileBaseline=null;
+let profileBaseline=null,partnerPhotoDraft='';
 function openProfile(){
  const profile=state.profiles[author];profileDraft=profile?.photo||'';
  $('firstNameInput').value=profile?.firstName||(myName==='Io'?'':myName);$('lastNameInput').value=profile?.lastName||'';
  $('profilePreview').innerHTML='<span class="avatar">'+avatar(profile)+'</span>';
- const partner=state.profiles[author==='one'?'two':'one'];
+ const partner=state.profiles[author==='one'?'two':'one'];partnerPhotoDraft=partner?.photo||'';
  $('partnerProfile').innerHTML='<span class="avatar">'+avatar(partner,icon('heart'))+'</span><div><p>'+esc(partner?[partner.firstName,partner.lastName].filter(Boolean).join(' '):'Il suo angolino')+'</p><small>'+(partner?'Il profilo dell’altro diario':'Nome e foto da preparare per la sorpresa')+'</small></div>';
  $('partnerFirstName').value=partner?.firstName||'';$('partnerLastName').value=partner?.lastName||'';
- profileBaseline={own:{firstName:$('firstNameInput').value,lastName:$('lastNameInput').value,photo:profileDraft},partner:{firstName:$('partnerFirstName').value,lastName:$('partnerLastName').value}};
+ profileBaseline={own:{firstName:$('firstNameInput').value,lastName:$('lastNameInput').value,photo:profileDraft},partner:{firstName:$('partnerFirstName').value,lastName:$('partnerLastName').value,photo:partnerPhotoDraft}};
  $('otherDeviceHelp').textContent='Puoi preparare entrambi i nomi da qui. Sull’altro iPhone scegli '+(author==='one'?'Persona 2':'Persona 1')+': al primo collegamento riceverà i profili che avete preparato. I nomi non sono pubblicati sul sito.';
- $('anniversaryInput').value=state.settings.anniversary||'';renderLegacyProfiles();updateInstallUI();$('profileDialog').showModal();
+ $('anniversaryInput').value=state.settings.anniversary||'';renderLegacyProfiles();updateInstallUI();updateAdministrationUI();$('profileDialog').showModal();
 }
 $('profileButton').onclick=openProfile;$('installNotice').onclick=openProfile;
+$('partnerPhoto').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;await withSave(e.target,async()=>{if(author!=='one'||!adminKey)throw Error('Sblocca l’amministrazione');if(f.size>20*1024*1024)throw Error('Scegli una foto sotto i 20 MB');partnerPhotoDraft=await mediaURL(f,600);$('partnerProfile').querySelector('.avatar').innerHTML='<img src="'+esc(partnerPhotoDraft)+'" alt="Nuova foto dell’altra persona">';});};
+$('accessDialog').addEventListener('close',()=>{$('accessPassword').value='';$('accessPasswordAgain').value='';});
 $('profilePhoto').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;await withSave(e.target,async()=>{if(f.size>20*1024*1024)throw Error('Scegli una foto sotto i 20 MB');profileDraft=await mediaURL(f,600);$('profilePreview').innerHTML='<span class="avatar"><img src="'+esc(profileDraft)+'" alt="La tua nuova foto"></span>';});};
-$('profileForm').onsubmit=async e=>{e.preventDefault();await withSave(e.submitter,async()=>{const draft={own:{firstName:$('firstNameInput').value,lastName:$('lastNameInput').value,photo:profileDraft},partner:{firstName:$('partnerFirstName').value,lastName:$('partnerLastName').value}};const changes=DiaryModel.profileChanges(state.profiles,author,profileBaseline,draft);for(const change of changes)await addOp('profile',change.person,change.data,change.person);myName=personName();$('profileDialog').close();toast(changes.length?'Profili salvati soltanto nel diario':'I profili sono già aggiornati');});};
+$('profileForm').onsubmit=async e=>{e.preventDefault();await withSave(e.submitter,async()=>{const draft={own:{firstName:$('firstNameInput').value,lastName:$('lastNameInput').value,photo:profileDraft},partner:{firstName:$('partnerFirstName').value,lastName:$('partnerLastName').value,photo:partnerPhotoDraft}};const changes=DiaryModel.profileChanges(state.profiles,author,profileBaseline,draft,author==='one'&&!!adminKey);if(changes.some(change=>change.person!==author)&&!(author==='one'&&adminKey))throw Error('Soltanto l’amministratore può modificare l’altro profilo');for(const change of changes)await addOp('profile',change.person,change.data,change.person);myName=personName();$('profileDialog').close();toast(changes.length?'Profili salvati soltanto nel diario':'I profili sono già aggiornati');});};
 $('saveAnniversary').onclick=async()=>{const date=$('anniversaryInput').value;if(!date)return toast('Scegli la data del vostro inizio');await withSave($('saveAnniversary'),async()=>{await addOp('setting','our-story',{key:'anniversary',value:date});toast('Il nostro inizio è aggiornato');});};
 $('coverInput').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;await withSave(e.target,async()=>{if(f.size>20*1024*1024)throw Error('Scegli una foto sotto i 20 MB');const value=await mediaURL(f,2048);await addOp('setting','our-story',{key:'cover',value});toast('Adesso questa Home parla di voi');});};
 function openLetter(id){
@@ -332,19 +342,31 @@ function renderGamePlay(){
 document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>b.closest('dialog').close());
 $('detailDialog').addEventListener('close',()=>{active=null;renderedActivity=null;});
 $('linkIcon').innerHTML=icon('link');$('uploadIcon').innerHTML=icon('camera');
-$('export').onclick=()=>{
- const data={format:'tra-noi-v3',exportedAt:new Date().toISOString(),identity:{author,name:myName,person:author},ops};
- const blob=new Blob([JSON.stringify(data)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='tra-noi-'+localDay()+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),60000);toast('Backup esportato: salvalo sul Mac');
-};
+function completeBackup(){
+ if(!accessPolicy||author!=='one'||!adminKey||!adminVault)throw Error('Configura e sblocca l’amministrazione per creare il backup completo');
+ return new File([JSON.stringify({format:'tra-noi-v4',exportedAt:new Date().toISOString(),identity:{person:author},access:{policy:accessPolicy,vault:adminVault},ops})],'tra-noi-backup-'+localDay()+'-'+new Date().toISOString().slice(11,19).replaceAll(':','')+'.json',{type:'application/json'});
+}
+function downloadBackup(file){const url=URL.createObjectURL(file),a=document.createElement('a');a.href=url;a.download=file.name;a.click();setTimeout(()=>URL.revokeObjectURL(url),60000);}
+$('export').onclick=async()=>withSave($('export'),async()=>{downloadBackup(completeBackup());toast('Copia preparata: salvala nella cartella dei backup sul Mac');});
+$('shareBackup').onclick=async()=>withSave($('shareBackup'),async()=>{
+ const file=completeBackup();
+ if(navigator.canShare?.({files:[file]})){try{await navigator.share({files:[file],title:'Backup del diario'});}catch(e){if(e.name!=='AbortError')throw e;}}
+ else{downloadBackup(file);toast('Copia preparata: puoi trasferire il file al Mac');}
+});
 $('importButton').onclick=()=>$('importFile').click();
 $('importFile').onchange=async e=>{
  const file=e.target.files[0];e.target.value='';if(!file)return;
  await withSave(e.target,async()=>{
   if(file.size>150*1024*1024)throw Error('Questa copia supera il limite di importazione di 150 MB');
-  const data=JSON.parse(await file.text());if(!['tra-noi-v1','tra-noi-v2','tra-noi-v3'].includes(data.format)||!Array.isArray(data.ops))throw Error('Formato di backup non riconosciuto');
-  data.ops.forEach(validateOp);const ids=new Set(ops.map(o=>o.id)),fresh=[];for(const op of data.ops){if(!ids.has(op.id)){ids.add(op.id);fresh.push(op);}}
-  await new Promise((resolve,reject)=>{const tx=db.transaction('ops','readwrite');for(const op of fresh)tx.objectStore('ops').put(op);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error);});
-  ops.push(...fresh);render();renderLegacyProfiles();if(channel?.readyState==='open'&&peerPerson&&syncStarted)for(const op of fresh)await send({type:'op',op});toast('Backup importato: '+fresh.length+' contributi recuperati');
+  const data=JSON.parse(await file.text());if(!['tra-noi-v1','tra-noi-v2','tra-noi-v3','tra-noi-v4'].includes(data.format)||!Array.isArray(data.ops))throw Error('Formato di backup non riconosciuto');
+  const policy=data.access?.policy?await DiaryAccess.matchPolicy(accessPolicy,data.access.policy):accessPolicy;
+  for(const op of data.ops){validateOp(op);await DiaryAccess.authorize(op,policy);}
+  for(const op of ops)await DiaryAccess.authorize(op,policy);
+  const ids=new Set(ops.map(o=>o.id)),fresh=[];for(const op of data.ops){if(!ids.has(op.id)){ids.add(op.id);fresh.push(op);}}
+  const vault=author==='one'?(adminVault||data.access?.vault||null):null;
+  await new Promise((resolve,reject)=>{const tx=db.transaction(['ops','meta'],'readwrite');for(const op of fresh)tx.objectStore('ops').put(op);if(policy)tx.objectStore('meta').put({id:'administration',policy,vault});tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error);});
+  accessPolicy=policy;adminVault=vault;ops.push(...fresh);render();renderLegacyProfiles();closePeer();if($('profileDialog').open)openProfile();
+  toast('Backup recuperato. Il profilo di questo dispositivo resta '+personName()+'. Ricollega i diari per condividere il recupero.');
  });
 };
 document.addEventListener('visibilitychange',()=>{reportDiagnostic('visibility');if(!document.hidden)tickCounter();});
@@ -361,10 +383,11 @@ function setInstallManifest(){
 }
 async function choosePerson(person){
  if(!Object.hasOwn(people,person))throw Error('Scegli Persona 1 oppure Persona 2');
+ if(accessPolicy&&person==='one'&&person!==author&&!adminKey)throw Error('Il profilo amministratore richiede la chiave protetta. Ripristina il backup su un dispositivo dedicato e sbloccalo con la password.');
  const legacy=author,alias=legacy&&!Object.hasOwn(people,legacy)&&ops.some(o=>o.author===legacy)&&!Object.hasOwn(people,DiaryModel.resolveAuthor(legacy,ops))?{id:uuid(),kind:'identity',activity:'our-people',data:{legacy,person},author:person,name:personName(person),time:ops.reduce((n,o)=>Math.max(n,o.time+1),Date.now())}:null;
- if(alias)validateOp(alias);
+ if(alias){validateOp(alias);await DiaryAccess.authorize(alias,accessPolicy);}
  await new Promise((resolve,reject)=>{const tx=db.transaction(['meta','ops'],'readwrite');tx.objectStore('meta').put({id:'identity',person});if(alias)tx.objectStore('ops').put(alias);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error);});
- if(alias)ops.push(alias);closePeer();author=person;myName=personName(person);
+ if(alias)ops.push(alias);closePeer();if(person!=='one')adminKey=null;author=person;myName=personName(person);
  settingsStorage.setItem('diary-author',author);settingsStorage.setItem('diary-person',author);settingsStorage.setItem('diary-name',myName);
  profileMismatch=false;setInstallManifest();render();updateInstallUI();
  if($('identityDialog').open)$('identityDialog').close();
@@ -381,7 +404,7 @@ function updateInstallUI(){
  $('offlineStatus').textContent=offline.message;
  $('offlineStatus').dataset.ready=String(offline.ready);
  $('offlineSummary').textContent=offline.ready?(installed?'Disponibile offline':'Copia locale pronta'):offline.phase==='insecure'?'Installazione da completare':'Preparazione offline';
- $('deviceOwner').textContent=label;
+ $('deviceOwner').textContent=label+(accessPolicy?(author==='one'?' · Amministratore':' · Utente'):'');
  $('installExplanation').textContent=profileMismatch?'Questo diario appartiene a '+label+'. Il link dell’altro profilo non cambia l’identità già assegnata.':installed?'Questa è l’app sulla Home. Puoi consultare ciò che è già salvato anche senza Mac e senza rete.':'Per installarlo sull’iPhone, aggiungilo alla schermata Home, aprilo dall’icona con Internet disponibile e attendi “Pronto offline su questo iPhone”.';
  $('retryOffline').hidden=offline.ready;$('reloadDiary').hidden=offline.phase!=='error';
  $('setupLink').href='installazione.html';
@@ -392,6 +415,43 @@ window.addEventListener('diary-offline',event=>{updateInstallUI();if(window.diar
 $('retryOffline').onclick=()=>DiaryOffline.start();
 $('reloadDiary').onclick=()=>location.reload();
 $('changePerson').onclick=()=>{$('profileDialog').close();openIdentityPicker();};
+async function adoptPolicy(policy){
+ const checked=await DiaryAccess.matchPolicy(accessPolicy,policy);
+ if(accessPolicy)return;
+ for(const op of ops)await DiaryAccess.authorize(op,checked);
+ await store('meta',{id:'administration',policy:checked,vault:null});accessPolicy=checked;adminVault=null;updateAdministrationUI();
+}
+function updateAdministrationUI(){
+ const ownAdmin=author==='one',unlocked=ownAdmin&&!!adminKey,configured=!!accessPolicy;
+ $('administrationStatus').textContent=!configured?'Amministrazione da configurare sul telefono principale.':ownAdmin?(unlocked?'Amministratore sbloccato su questo dispositivo.':'Amministratore bloccato. La password serve per modificare i profili ed esportare il backup.'):'Profilo utente. Puoi modificare il tuo profilo; quello dell’amministratore è protetto.';
+ $('setupAdministration').hidden=configured||!ownAdmin;
+ $('unlockAdministration').hidden=!configured||!ownAdmin||unlocked||!adminVault;
+ $('lockAdministration').hidden=!unlocked;
+ $('recoverAdminNote').hidden=!configured||!ownAdmin||!!adminVault;
+ $('partnerPhotoLabel').hidden=!unlocked;
+ $('changePerson').disabled=configured;
+ const ownLocked=ownAdmin&&configured&&!unlocked;
+ for(const id of ['firstNameInput','lastNameInput','profilePhoto'])$(id).disabled=ownLocked;
+ for(const id of ['partnerFirstName','partnerLastName'])$(id).disabled=!unlocked;
+ $('otherDeviceHelp').textContent=unlocked?'Puoi modificare entrambi i nomi. I profili saranno trasferiti al collegamento successivo e non vengono pubblicati sul sito.':'Puoi modificare soltanto il tuo profilo. Il telefono dell’altra persona mantiene i propri dati e permessi.';
+ $('export').hidden=!unlocked;$('shareBackup').hidden=!unlocked;
+ $('backupHelp').textContent='Il backup completo comprende i contributi di entrambi presenti su questo iPhone e la chiave amministratore protetta dalla password. Sincronizza prima i diari, poi salva il file sul Mac. I contenuti del backup sono leggibili: conservalo come le tue foto private. Il Mac non deve restare collegato.';
+ $('deviceOwner').textContent=personName()+(configured?(ownAdmin?' · Amministratore':' · Utente'):'');
+}
+$('setupAdministration').onclick=()=>{ $('accessPassword').value='';$('accessPasswordAgain').value='';$('accessConfirmLabel').hidden=false;$('accessPasswordAgain').required=true;$('accessTitle').textContent='Proteggi l’amministrazione';$('accessExplanation').textContent='Scegli una password di almeno 10 caratteri. Resterà su questo dispositivo soltanto la chiave cifrata. Conserva la password: non esiste un servizio che possa recuperarla.';$('accessForm').dataset.mode='setup';$('accessDialog').showModal();};
+$('unlockAdministration').onclick=()=>{ $('accessPassword').value='';$('accessConfirmLabel').hidden=true;$('accessPasswordAgain').required=false;$('accessTitle').textContent='Sblocca amministrazione';$('accessExplanation').textContent='Lo sblocco vale per questa apertura del diario. La password non viene inviata ad altri dispositivi.';$('accessForm').dataset.mode='unlock';$('accessDialog').showModal();};
+$('lockAdministration').onclick=()=>{adminKey=null;updateAdministrationUI();toast('Amministrazione bloccata');};
+$('accessForm').onsubmit=async e=>{e.preventDefault();await withSave(e.submitter,async()=>{
+ const password=$('accessPassword').value;
+ if($('accessForm').dataset.mode==='setup'){
+  if(accessPolicy||author!=='one')throw Error('Configurazione non disponibile');
+  if(password!==$('accessPasswordAgain').value)throw Error('Le password non coincidono');
+  const created=await DiaryAccess.create(password,ops);
+  await store('meta',{id:'administration',policy:created.policy,vault:created.vault});
+  accessPolicy=created.policy;adminVault=created.vault;adminKey=created.key;closePeer();
+ }else adminKey=await DiaryAccess.unlock(password,adminVault,accessPolicy);
+ $('accessPassword').value='';$('accessPasswordAgain').value='';$('accessDialog').close();updateAdministrationUI();toast('Amministrazione sbloccata. Ora puoi preparare i due profili.');
+});};
 function renderLegacyProfiles(){
  const unresolved=[...new Set(ops.map(o=>o.author))].filter(id=>!Object.hasOwn(people,id)&&DiaryModel.resolveAuthor(id,ops)===id);
  $('legacyProfiles').hidden=!unresolved.length;

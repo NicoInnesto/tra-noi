@@ -56,10 +56,10 @@ function validateOp(o){
  if(!ok)throw Error('Contenuto del diario non valido: '+o.kind);
 }
 function activities(ops){return project(ops).memories;}
-function profileChanges(profiles,owner,baseline,draft){
+function profileChanges(profiles,owner,baseline,draft,allowPartnerPhoto=false){
  if(!Object.hasOwn(people,owner))throw Error('Scegli il profilo di questo dispositivo');
  const other=owner==='one'?'two':'one',changes=[];
- for(const [person,part,keys]of [[owner,'own',['firstName','lastName','photo']],[other,'partner',['firstName','lastName']]]){
+ for(const [person,part,keys]of [[owner,'own',['firstName','lastName','photo']],[other,'partner',allowPartnerPhoto?['firstName','lastName','photo']:['firstName','lastName']]]){
   const current=profiles[person]||people[person],next={firstName:current.firstName,lastName:current.lastName,photo:current.photo};let changed=false;
   for(const key of keys){const value=key==='photo'?draft[part][key]:draft[part][key].trim();if(value!==baseline[part][key]){next[key]=value;changed=true;}}
   if(!changed)continue;
