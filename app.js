@@ -1,6 +1,6 @@
 'use strict';
 window.diaryBoot=window.diaryBoot||{phase:'Caricamento del diario',ready:false};
-const VERSION=20;
+const VERSION=21;
 const WIRE_VERSION=18;
 const uuid=()=>crypto.randomUUID?crypto.randomUUID():([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g,c=>(c^crypto.getRandomValues(new Uint8Array(1))[0]&15>>c/4).toString(16));
 const $=id=>document.getElementById(id);
@@ -520,6 +520,25 @@ function renderLegacyProfiles(){
 }
 $('saveLegacy').onclick=async()=>withSave($('saveLegacy'),async()=>{for(const node of document.querySelectorAll('[data-legacy]'))if(node.value)await addOp('identity','our-people',{legacy:node.dataset.legacy,person:node.value},node.value);renderLegacyProfiles();toast('Contributi associati ai profili scelti');});
 
+function measureScreen(){
+ const probe=getComputedStyle($('viewportProbe')),nav=$('bottomNav').getBoundingClientRect(),shell=document.querySelector('.app-shell').getBoundingClientRect(),round=n=>Math.round(n||0);
+ $('screenMeasurements').value=[
+ 'Versione app: '+VERSION,
+ 'Modalità: '+(DiaryOffline.isInstalled()?'app Home':'browser'),
+ 'Schermo: '+screen.width+' × '+screen.height,
+ 'Finestra: '+innerWidth+' × '+innerHeight,
+ 'Documento: '+document.documentElement.clientHeight,
+ 'Vista visibile: '+round(window.visualViewport?.height)+' / inizio '+round(window.visualViewport?.offsetTop),
+ 'Area superiore: '+probe.getPropertyValue('--screen-top').trim(),
+ 'Area inferiore: '+probe.getPropertyValue('--screen-bottom').trim(),
+ 'Altezza massima CSS: '+round($('viewportProbe').getBoundingClientRect().height),
+ 'App: inizio '+round(shell.top)+' / fine '+round(shell.bottom),
+ 'Menu: inizio '+round(nav.top)+' / fine '+round(nav.bottom),
+ 'Barra di stato: '+document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]').content
+ ].join('\n');
+}
+$('screenCheck').addEventListener('toggle',()=>{if($('screenCheck').open)measureScreen();});
+$('measureScreen').onclick=measureScreen;
 let photoViewerItems=[],photoViewerIndex=0;
 function openPhotoViewer(id){
  const memory=state.memories.find(m=>m.id===active);photoViewerItems=(memory?.media||[]).filter(m=>m.type.startsWith('image/'));

@@ -68,3 +68,5 @@ dialog{max-height:calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-b
 .nav-dragging .nav-bubble{transition:width .12s;transform:translate3d(var(--bubble-x,7px),-2px,0) scale(1.07,1.08);box-shadow:inset 0 1px 2px #fff8,inset 0 -1px 2px #fff3,0 6px 20px #07030c44}
 .nav-dragging a.active:not(.nav-preview){color:#c9b8cf}.nav-dragging a.nav-preview{color:#ffe3f0;transform:translateY(-2px) scale(1.05)}
 @media(prefers-reduced-motion:reduce){.nav-bubble,.bottom-nav a{transition:none}.nav-dragging a.nav-preview{transform:none}}
+
+#viewportProbe{position:fixed;left:0;top:0;width:0;height:100vh;height:100lvh;visibility:hidden;pointer-events:none;--screen-top:env(safe-area-inset-top,0px);--screen-bottom:env(safe-area-inset-bottom,0px)}#screenMeasurements{font:12px/1.7 ui-monospace,monospace;min-height:260px;resize:none}
