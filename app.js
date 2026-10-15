@@ -1,7 +1,7 @@
 'use strict';
 window.diaryBoot=window.diaryBoot||{phase:'Caricamento del diario',ready:false};
-const VERSION=21;
-const WIRE_VERSION=18;
+const VERSION=22;
+const WIRE_VERSION=22;
 const uuid=()=>crypto.randomUUID?crypto.randomUUID():([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g,c=>(c^crypto.getRandomValues(new Uint8Array(1))[0]&15>>c/4).toString(16));
 const $=id=>document.getElementById(id);
 const storagePrefix='tra-noi:'+new URL('./',location.href).pathname+':';
@@ -55,6 +55,21 @@ function nameOf(id,fallback='Il tuo amore'){return state.profiles[id]?.firstName
 function avatar(profile,fallback=''){return profile?.photo?'<img src="'+esc(profile.photo)+'" alt="">':profile?.firstName?esc(profile.firstName.slice(0,1).toUpperCase()):fallback||icon('user');}
 function toast(s){const host=document.querySelector('dialog[open]')||document.body;host.append($('toast'));$('toast').textContent=s;$('toast').style.display='block';clearTimeout(toast.timer);toast.timer=setTimeout(()=>$('toast').style.display='none',4500);}
 function store(name,value){return new Promise((resolve,reject)=>{const tx=db.transaction(name,'readwrite');tx.objectStore(name).put(value);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error);});}
+let mutationTail=Promise.resolve();
+function mergeOperations(incoming,administration=null){
+ const task=async()=>{
+  const next=DiaryModel.compactOps([...ops,...incoming]),keep=new Set(next.map(o=>o.id)),previous=new Set(ops.map(o=>o.id)),purged=ops.filter(o=>!keep.has(o.id)),fresh=next.filter(o=>!previous.has(o.id));
+  await new Promise((resolve,reject)=>{
+   const tx=db.transaction(['ops','acks','meta'],'readwrite');
+   for(const op of purged){tx.objectStore('ops').delete(op.id);tx.objectStore('acks').delete(op.id);}
+   for(const op of fresh)tx.objectStore('ops').put(op);
+   if(administration)tx.objectStore('meta').put({id:'administration',...administration});
+   tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error);
+  });
+  ops=next;for(const op of purged)acks.delete(op.id);return fresh.length;
+ };
+ const result=mutationTail.then(task);mutationTail=result.catch(()=>{});return result;
+}
 async function init(){
  window.diaryBoot.phase='Apertura della memoria locale';
  db=await new Promise((resolve,reject)=>{const r=indexedDB.open(storagePrefix+'archive',2);r.onupgradeneeded=()=>{if(!r.result.objectStoreNames.contains('ops'))r.result.createObjectStore('ops',{keyPath:'id'});if(!r.result.objectStoreNames.contains('acks'))r.result.createObjectStore('acks',{keyPath:'id'});if(!r.result.objectStoreNames.contains('meta'))r.result.createObjectStore('meta',{keyPath:'id'});};r.onblocked=()=>{window.diaryBoot.phase='Chiudi le altre schede del diario e riprova';$('bootStatus').hidden=false;$('bootStatus').textContent=window.diaryBoot.phase;};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});
@@ -62,6 +77,7 @@ async function init(){
  if(accessRow?.policy){accessPolicy=await DiaryAccess.checkPolicy(accessRow.policy);adminVault=accessRow.vault||null;}
  for(const name of ['ops','acks']){const rows=await new Promise((resolve,reject)=>{const r=db.transaction(name).objectStore(name).getAll();r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});if(name==='ops')ops=rows;else acks=new Set(rows.map(x=>x.id));}
  for(const op of ops){validateOp(op);await DiaryAccess.authorize(op,accessPolicy);}
+ if(DiaryModel.compactOps(ops).length!==ops.length)await mergeOperations([]);
  db.onversionchange=()=>{db.close();toast('È disponibile un aggiornamento. Riapri il diario.');};
  const storedIdentity=await new Promise((resolve,reject)=>{const r=db.transaction('meta').objectStore('meta').get('identity');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});
  const savedPerson=storedIdentity?.person||settingsStorage.getItem('diary-person');
@@ -89,13 +105,14 @@ function render(){
  $('view').innerHTML=({home:renderHome,ricordi:renderMemories,calendario:renderCalendar,lettere:renderLetters,giochi:renderGames}[view])();
  $('storage').textContent='Archivio locale: circa '+(ops.reduce((n,o)=>n+new Blob([JSON.stringify(o)]).size,0)/1024/1024).toFixed(1)+' MB. Gli originali in Foto occupano spazio separatamente.';
  tickCounter();
+ if(active&&!state.memories.some(m=>m.id===active)){if($('photoViewer').open)$('photoViewer').close();if($('detailDialog').open)$('detailDialog').close();active=null;}
  if(active)renderDetail();
  updateAdministrationUI();
  updateInstallUI();
 }
 function renderHome(){
  const date=state.settings.anniversaryStart?.date||state.settings.anniversary||'',mediaCount=state.memories.reduce((n,a)=>n+a.media.length,0);
- return '<div class="home-topline"><span>'+esc(new Date().toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long'}))+'</span><span>'+icon('lock')+'Il nostro spazio</span></div><div class="home-layout"><div><section class="hero">'+(state.settings.cover?'<img class="hero-image" src="'+esc(state.settings.cover)+'" alt="La nostra foto">':'<div class="hero-orbit"></div><div class="hero-orbit second"></div><div class="hero-heart">'+icon('heart')+'</div>')+'<button class="photo-edit" data-action="cover">'+icon('camera')+(state.settings.cover?'Cambia foto':'La nostra foto')+'</button><div class="hero-content"><div><span class="hero-kicker">LA NOSTRA STORIA</span><h1>Tu, io.<br><em>Tutto il resto.</em></h1></div><div class="together"><div class="together-title">Insieme da</div><div class="counter" aria-label="Tempo trascorso insieme"><div><strong id="days">—</strong><span>giorni</span></div><div><strong id="hours">—</strong><span>ore</span></div><div><strong id="minutes">—</strong><span>minuti</span></div><div><strong id="seconds">—</strong><span>secondi</span></div></div><p class="together-since">'+(date?'Dal '+esc(formatDate(date))+(state.settings.anniversaryStart?' · ore '+esc(state.settings.anniversaryStart.time):''):'Scegli la vostra data nel profilo')+'</p></div></div></section><div class="stat-strip"><div><strong>'+state.memories.length+'</strong><span>ricordi</span></div><div><strong>'+mediaCount+'</strong><span>foto e video</span></div><div><strong>'+state.letters.length+'</strong><span>lettere</span></div></div></div><div class="home-side"><div class="section-heading"><h2>Le nostre cose.</h2><button class="text-button" data-view="ricordi">Esplora '+icon('right')+'</button></div><div class="collection-grid">'+Object.keys(sectionInfo).map(key=>collectionTile(key)).join('')+'</div></div></div><button class="quick-letter" data-action="write-letter"><span class="tile-icon">'+icon('letter')+'</span><div><strong>Ti lascio un pensiero.</strong><p>Ci sono cose che è bello scriversi.</p></div>'+icon('right','chevron')+'</button>';
+ return '<div class="home-topline"><span>'+esc(new Date().toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long'}))+'</span><span>'+icon('lock')+'Il nostro spazio</span></div><div class="home-layout"><div><section class="hero">'+(state.settings.cover?'<img class="hero-image" src="'+esc(state.settings.cover)+'" alt="La nostra foto">':'<div class="hero-orbit"></div><div class="hero-orbit second"></div><div class="hero-heart">'+icon('heart')+'</div>')+'<button class="photo-edit" data-action="cover">'+icon('camera')+(state.settings.cover?'Cambia foto':'La nostra foto')+'</button><div class="hero-content"><div><span class="hero-kicker">LA NOSTRA STORIA</span><h1>Tu, io.<br><em>Tutto il resto.</em></h1></div><div class="together"><div class="together-title">Insieme da</div><div class="counter" aria-label="Tempo trascorso insieme"><div><strong id="days">—</strong><span>giorni</span></div><div><strong id="hours">—</strong><span>ore</span></div><div><strong id="minutes">—</strong><span>minuti</span></div><div><strong id="seconds">—</strong><span>secondi</span></div></div><p class="together-since">'+(date?'Dal '+esc(formatDate(date))+(state.settings.anniversaryStart?' · ore '+esc(state.settings.anniversaryStart.time):''):'Scegli la vostra data nel profilo')+'</p></div></div></section><div class="stat-strip"><div><strong>'+state.memories.length+'</strong><span>ricordi</span></div><div><strong>'+mediaCount+'</strong><span>foto e video</span></div><div><strong>'+state.letters.length+'</strong><span>lettere</span></div></div></div><div class="home-side"><div class="section-heading"><h2>Le nostre cose.</h2><button class="text-button" data-view="ricordi">Esplora '+icon('right')+'</button></div><div class="collection-grid">'+Object.keys(sectionInfo).map(key=>collectionTile(key)).join('')+'<button class="collection-card tone-letters" data-action="write-letter"><span class="tile-icon">'+icon('letter')+'</span><strong>Ti lascio un pensiero.</strong><small>Una lettera per te.</small>'+icon('right','chevron')+'</button></div></div></div>';
 }
 function tickCounter(){
  if(!$('days'))return;
@@ -230,7 +247,8 @@ function renderDetail(){
  const draft=renderedActivity===active&&$('comment')?{comment:$('comment').value,score:$('score').value}:null;
  const a=state.memories.find(a=>a.id===active);if(!a)return;const mine=a.ratings[author];
  const canRate=['experiences','dance'].includes(a.section);
- $('detail').innerHTML='<p class="eyebrow">'+esc(a.category)+'</p><h2>'+esc(a.title)+'</h2><div class="detail-meta"><span>'+esc(formatDate(a.date))+(a.endDate?' — '+esc(formatDate(a.endDate)):'')+'</span>'+(a.location?'<span>'+esc(a.location)+'</span>':'')+(a.recipient?'<span>Ricevuto da '+esc(a.recipient)+'</span>':'')+'</div>'+(a.description?'<p class="detail-description">'+esc(a.description)+'</p>':'')+'<p class="field-help">'+(pending(a.id)?'Custodito su questo dispositivo. Collegate i diari per condividerlo.':'I tuoi contributi sono stati ricevuti anche dall’altro diario.')+'</p>'+(canRate?'<div class="ratings">'+Object.entries(a.ratings).map(([id,r])=>'<div class="rating"><div class="rating-name">'+esc(nameOf(id,r.name))+'</div><strong>'+r.score+'<small> / 10</small></strong>'+(r.comment?'<p>'+esc(r.comment)+'</p>':'')+'</div>').join('')+'</div><form id="ratingForm"><div class="form-row"><label>Il tuo voto<select id="score">'+Array.from({length:10},(_,i)=>'<option '+((mine?.score||8)===i+1?'selected':'')+'>'+(i+1)+'</option>').join('')+'</select></label></div><label>Il tuo commento<textarea id="comment" maxlength="2000" placeholder="Che cosa ti è rimasto di questo momento?">'+esc(mine?.comment||'')+'</textarea></label><button class="primary" type="submit">Salva il tuo contributo</button></form>':'')+renderMediaGallery(a);
+ $('detail').innerHTML='<p class="eyebrow">'+esc(a.category)+'</p><h2>'+esc(a.title)+'</h2><div class="detail-meta"><span>'+esc(formatDate(a.date))+(a.endDate?' — '+esc(formatDate(a.endDate)):'')+'</span>'+(a.location?'<span>'+esc(a.location)+'</span>':'')+(a.recipient?'<span>Ricevuto da '+esc(a.recipient)+'</span>':'')+'</div>'+(a.description?'<p class="detail-description">'+esc(a.description)+'</p>':'')+'<p class="field-help">'+(pending(a.id)?'Custodito su questo dispositivo. Collegate i diari per condividerlo.':'I tuoi contributi sono stati ricevuti anche dall’altro diario.')+'</p>'+(canRate?'<div class="ratings">'+Object.entries(a.ratings).map(([id,r])=>'<div class="rating"><div class="rating-name">'+esc(nameOf(id,r.name))+'</div><strong>'+r.score+'<small> / 10</small></strong>'+(r.comment?'<p>'+esc(r.comment)+'</p>':'')+'</div>').join('')+'</div><form id="ratingForm"><div class="form-row"><label>Il tuo voto<select id="score">'+Array.from({length:10},(_,i)=>'<option '+((mine?.score||8)===i+1?'selected':'')+'>'+(i+1)+'</option>').join('')+'</select></label></div><label>Il tuo commento<textarea id="comment" maxlength="2000" placeholder="Che cosa ti è rimasto di questo momento?">'+esc(mine?.comment||'')+'</textarea></label><button class="primary" type="submit">Salva il tuo contributo</button></form>':'')+renderMediaGallery(a)+'<div class="delete-memory-section"><button class="text-button danger-button" id="deleteMemory">Elimina definitivamente il ricordo</button></div>';
+ $('deleteMemory').onclick=()=>{deleteMemoryId=a.id;$('deleteMemoryTitle').textContent=a.title;$('deleteMemoryDialog').showModal();};
  renderedActivity=active;if(draft&&$('comment')){$('comment').value=draft.comment;$('score').value=draft.score;}
  if($('ratingForm'))$('ratingForm').onsubmit=async e=>{e.preventDefault();const data={score:Number($('score').value),comment:$('comment').value};await withSave(e.submitter,async()=>{await addOp('rating',a.id,data);toast('Il tuo contributo è salvato');});};
 }
@@ -250,7 +268,7 @@ async function addOp(kind,activity,data,opAuthor=author){
  const time=ops.reduce((n,o)=>Math.max(n,o.time+1),Date.now()),op={id:uuid(),kind,activity,data,author:opAuthor,name:personName(opAuthor),time};validateOp(op);
  if(['profile','identity'].includes(kind)){op.actor=author;if(author==='one'&&accessPolicy){if(!adminKey)throw Error('Sblocca prima l’amministrazione');Object.assign(op,await DiaryAccess.sign(op,adminKey));}if(author==='two'&&(opAuthor!=='two'||kind==='identity'))throw Error('Puoi modificare soltanto il tuo profilo');}
  await DiaryAccess.authorize(op,accessPolicy);
- try{await store('ops',op);ops.push(op);render();if(channel?.readyState==='open'&&peerPerson&&syncStarted)send({type:'op',op}).catch(()=>toast('Trasferimento interrotto: il contenuto resta qui'));}catch(e){throw Error('Salvataggio non riuscito. Controlla lo spazio disponibile.');}
+ try{await mergeOperations([op]);render();if(channel?.readyState==='open'&&peerPerson&&syncStarted)send({type:'op',op}).catch(()=>toast('Trasferimento interrotto: il contenuto resta qui'));}catch(e){throw Error('Salvataggio non riuscito. Controlla lo spazio disponibile.');}
 }
 function validateOp(op){return DiaryModel.validateOp(op);}
 function connection(status,online=false){$('connection').textContent=status;$('dot').classList.toggle('online',online);$('pairStatus').textContent=status;}
@@ -290,7 +308,7 @@ async function receiveFrame(raw){
   return;
  }
  if(!peerPerson)throw Error('I profili non sono ancora stati verificati');
- if(message.type==='op'){const op=message.op;validateOp(op);await DiaryAccess.authorize(op,accessPolicy);if(!ops.some(o=>o.id===op.id)){await store('ops',op);ops.push(op);render();}await send({type:'ack',id:op.id});}
+ if(message.type==='op'){const op=message.op;validateOp(op);await DiaryAccess.authorize(op,accessPolicy);if(!ops.some(o=>o.id===op.id)){await mergeOperations([op]);render();}await send({type:'ack',id:op.id});}
  if(message.type==='ack'&&ops.some(o=>o.id===message.id)){await store('acks',{id:message.id});acks.add(message.id);render();}
  if(message.type==='sync-done')connection('Collegato con '+peerName+' · ricordi ricevuti',true);
 }
@@ -423,10 +441,9 @@ $('importFile').onchange=async e=>{
   const policy=data.access?.policy?await DiaryAccess.matchPolicy(accessPolicy,data.access.policy):accessPolicy;
   for(const op of data.ops){validateOp(op);await DiaryAccess.authorize(op,policy);}
   for(const op of ops)await DiaryAccess.authorize(op,policy);
-  const ids=new Set(ops.map(o=>o.id)),fresh=[];for(const op of data.ops){if(!ids.has(op.id)){ids.add(op.id);fresh.push(op);}}
   const vault=author==='one'?(adminVault||data.access?.vault||null):null;
-  await new Promise((resolve,reject)=>{const tx=db.transaction(['ops','meta'],'readwrite');for(const op of fresh)tx.objectStore('ops').put(op);if(policy)tx.objectStore('meta').put({id:'administration',policy,vault});tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error);});
-  accessPolicy=policy;adminVault=vault;ops.push(...fresh);render();renderLegacyProfiles();closePeer();if($('profileDialog').open)openProfile();
+  await mergeOperations(data.ops,policy?{policy,vault}:null);
+  accessPolicy=policy;adminVault=vault;render();renderLegacyProfiles();closePeer();if($('profileDialog').open)openProfile();
   toast('Backup recuperato. Il profilo di questo dispositivo resta '+personName()+'. Ricollega i diari per condividere il recupero.');
  });
 };
@@ -539,6 +556,13 @@ function measureScreen(){
 }
 $('screenCheck').addEventListener('toggle',()=>{if($('screenCheck').open)measureScreen();});
 $('measureScreen').onclick=measureScreen;
+let deleteMemoryId=null;
+$('confirmDeleteMemory').onclick=async e=>withSave(e.currentTarget,async()=>{
+ const target=deleteMemoryId;if(!target||!state.memories.some(m=>m.id===target))return;
+ await addOp('delete-memory',target,{});
+ $('deleteMemoryDialog').close();deleteMemoryId=null;toast('Ricordo eliminato. La cancellazione verrà condivisa con l’altro diario.');
+});
+$('deleteMemoryDialog').addEventListener('close',()=>{deleteMemoryId=null;});
 let photoViewerItems=[],photoViewerIndex=0;
 function openPhotoViewer(id){
  const memory=state.memories.find(m=>m.id===active);photoViewerItems=(memory?.media||[]).filter(m=>m.type.startsWith('image/'));

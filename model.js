@@ -12,7 +12,12 @@ function aliases(ops){
  return map;
 }
 function resolveAuthor(id,ops){return aliases(ops)[id]||id;}
+function compactOps(ops){
+ const deleted=new Set(ops.filter(o=>o.kind==='delete-memory').map(o=>o.activity)),seen=new Set(),content=new Set(['create','rating','media','media-state']);
+ return ops.filter(o=>{if(seen.has(o.id))return false;seen.add(o.id);return !(deleted.has(o.activity)&&content.has(o.kind));});
+}
 function project(ops){
+ ops=compactOps(ops);
  const memories=new Map(),mediaStates=new Map(),categories=new Set(defaults),profiles=Object.create(null),settings=Object.create(null),letters=new Map(),games=new Map(),results=[];
  for(const [id,p]of Object.entries(people))profiles[id]={...p};
  const identities=aliases(ops);
@@ -46,6 +51,7 @@ function validateOp(o){
  if(o.kind==='rating')ok=Number.isInteger(d.score)&&d.score>=1&&d.score<=10&&text(d.comment,2000);
  if(o.kind==='media')ok=text(d.url,40*1024*1024)&&/^data:(image\/(jpeg|png|webp)|video\/(mp4|quicktime|webm));base64,[A-Za-z0-9+/=]+$/.test(d.url)&&text(d.type,80)&&text(d.name,300);
  if(o.kind==='media-state')ok=text(d.mediaId,120)&&!!d.mediaId&&typeof d.removed==='boolean';
+ if(o.kind==='delete-memory')ok=!!o.activity&&Object.keys(d).length===0;
  if(o.kind==='category')ok=text(d.name,60)&&!!d.name.trim();
  if(o.kind==='identity')ok=text(d.legacy,120)&&!!d.legacy&&!Object.hasOwn(people,d.legacy)&&text(d.person,120)&&!!d.person&&d.person!==d.legacy&&o.author===d.person;
  if(o.kind==='profile')ok=text(d.firstName,40)&&!!d.firstName.trim()&&text(d.lastName,60)&&image(d.photo);
@@ -70,6 +76,6 @@ function profileChanges(profiles,owner,baseline,draft,allowPartnerPhoto=false){
  }
  return changes;
 }
-root.DiaryModel={project,activities,validateOp,sections,defaults,sectionOf,validDate,people,resolveAuthor,profileChanges};
+root.DiaryModel={project,activities,validateOp,sections,defaults,sectionOf,validDate,people,resolveAuthor,profileChanges,compactOps};
 if(typeof module!=='undefined')module.exports=root.DiaryModel;
 })(globalThis);

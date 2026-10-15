@@ -16,7 +16,10 @@ function startInstant(date,time){
 }
 function counterParts(settings,now=Date.now()){
  const saved=settings.anniversaryStart,date=saved?.date||settings.anniversary;if(!date)return null;
- const start=saved?.instant||startInstant(date,'00:00'),elapsed=Math.max(0,Math.floor((now-Date.parse(start))/1000));
+ const [y,m,d]=date.split('-').map(Number),[h,min]=(saved?.time||'00:00').split(':').map(Number);
+ const parts=Object.fromEntries(new Intl.DateTimeFormat('en-GB',{timeZone:'Europe/Rome',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}).formatToParts(new Date(now)).map(p=>[p.type,p.value]));
+ const wallNow=Date.UTC(Number(parts.year),Number(parts.month)-1,Number(parts.day),Number(parts.hour),Number(parts.minute),Number(parts.second));
+ const elapsed=Math.max(0,Math.floor((wallNow-Date.UTC(y,m-1,d,h,min))/1000));
  return {days:Math.floor(elapsed/86400),hours:Math.floor(elapsed/3600)%24,minutes:Math.floor(elapsed/60)%60,seconds:elapsed%60};
 }
 function navIndex(x,left,right,count){return Math.max(0,Math.min(count-1,Math.floor((x-left)/Math.max(1,right-left)*count)));}

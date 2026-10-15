@@ -70,3 +70,12 @@ dialog{max-height:calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-b
 @media(prefers-reduced-motion:reduce){.nav-bubble,.bottom-nav a{transition:none}.nav-dragging a.nav-preview{transform:none}}
 
 #viewportProbe{position:fixed;left:0;top:0;width:0;height:100vh;height:100lvh;visibility:hidden;pointer-events:none;--screen-top:env(safe-area-inset-top,0px);--screen-bottom:env(safe-area-inset-bottom,0px)}#screenMeasurements{font:12px/1.7 ui-monospace,monospace;min-height:260px;resize:none}
+
+.collection-card.tone-experiences{--tile-accent:#cbb4f0;background:linear-gradient(125deg,#3e3054,#2b213c)}
+.collection-card.tone-dance{--tile-accent:#efbad4;background:linear-gradient(125deg,#4b2d43,#342238)}
+.collection-card.tone-trips{--tile-accent:#aebdf5;background:linear-gradient(125deg,#2c3859,#242a42)}
+.collection-card.tone-gifts{--tile-accent:#afe0ee;background:linear-gradient(125deg,#2b4651,#20333f)}
+.collection-card.tone-holidays{--tile-accent:#f1c8ac;background:linear-gradient(125deg,#4c3a34,#34282f)}
+.collection-card.tone-letters{--tile-accent:#b4ddc7;background:linear-gradient(125deg,#30493f,#243632)}
+.collection-card .tile-icon{color:var(--tile-accent,var(--pink));background:#ffffff08}.collection-card>small{color:#c7bdcf}
+.delete-memory-section{border-top:1px solid var(--line);margin-top:24px;padding-top:16px}.danger-button{color:#f0a8b5;min-height:44px}.danger-primary{background:#f0a8b5;color:#361c27}.delete-title{font-size:16px;overflow-wrap:anywhere;color:var(--pink)}
