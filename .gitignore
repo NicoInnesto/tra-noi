@@ -1,0 +1,8 @@
+*.key
+*.pem
+*.mobileconfig
+*.p12
+*.pfx
+backup*
+tra-noi-*.json
+.DS_Store
