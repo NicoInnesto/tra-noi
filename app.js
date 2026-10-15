@@ -1,6 +1,7 @@
 'use strict';
 window.diaryBoot=window.diaryBoot||{phase:'Caricamento del diario',ready:false};
-const VERSION=13;
+const VERSION=14;
+const WIRE_VERSION=13;
 const uuid=()=>crypto.randomUUID?crypto.randomUUID():([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g,c=>(c^crypto.getRandomValues(new Uint8Array(1))[0]&15>>c/4).toString(16));
 const $=id=>document.getElementById(id);
 const storagePrefix='tra-noi:'+new URL('./',location.href).pathname+':';
@@ -180,12 +181,16 @@ async function addOp(kind,activity,data,opAuthor=author){
 function validateOp(op){return DiaryModel.validateOp(op);}
 function connection(status,online=false){$('connection').textContent=status;$('dot').classList.toggle('online',online);$('pairStatus').textContent=status;}
 function closePeer(){peerPerson='';syncStarted=false;clearTimeout(channel?.helloTimer);clearInterval(pollTimer);clearInterval(diagnosticTimer);pollTimer=null;const oldChannel=channel,oldPeer=pc;pc=null;channel=null;pairId=null;peerName='';$('pairCode').textContent='';if(oldChannel){oldChannel.onopen=null;oldChannel.onclose=null;oldChannel.onmessage=null;oldChannel.close();}if(oldPeer){oldPeer.ondatachannel=null;oldPeer.onconnectionstatechange=null;oldPeer.oniceconnectionstatechange=null;oldPeer.close();}transfers.clear();connection('Diario locale · non collegato');}
-function reportDiagnostic(){}
-function reportStats(){}
+function reportDiagnostic(stage){
+ const node=$('connectionDebug');if(!node)return;
+ const count=s=>(s||'').split('\n').filter(line=>line.startsWith('a=candidate:')).length;
+ node.textContent=['Ultimo passaggio: '+stage,'Connessione: '+(pc?.connectionState||'non avviata'),'Rete: '+(pc?.iceConnectionState||'non avviata'),'Raccolta rete: '+(pc?.iceGatheringState||'non avviata'),'Percorsi locali: '+count(pc?.localDescription?.sdp),'Percorsi ricevuti: '+count(pc?.remoteDescription?.sdp),'Canale: '+(channel?.readyState||'non aperto')].join('\n');
+}
+function reportStats(){reportDiagnostic('controllo locale');}
 function makePeer(){closePeer();if(!window.RTCPeerConnection)throw Error('Questo browser non supporta il collegamento. Usa Safari aggiornato.');const created=new RTCPeerConnection({iceServers:localIceServers});pc=created;created.ondatachannel=e=>{if(pc===created)bindChannel(e.channel);};created.onconnectionstatechange=()=>{if(pc!==created)return;reportDiagnostic('connection');if(created.connectionState==='failed')connection('Connessione diretta non riuscita · i ricordi restano qui');else if(created.connectionState==='disconnected')connection('Connessione in pausa · tentativo di ripresa…');};created.oniceconnectionstatechange=()=>{if(pc===created)reportDiagnostic('ice');};created.onicecandidateerror=e=>{if(pc===created)reportDiagnostic('candidate-error',{code:e.errorCode,message:e.errorText});};diagnosticTimer=setInterval(reportStats,5000);reportDiagnostic('start');return created;}
 function bindChannel(c){
  channel=c;peerPerson='';syncStarted=false;c.bufferedAmountLowThreshold=65536;
- c.onopen=async()=>{if(channel!==c)return;reportDiagnostic('channel-open');clearInterval(pollTimer);connection('Verifica dei due profili…',true);try{await send({type:'hello',protocol:VERSION,person:author,name:personName(),ticket:sessionTicket});c.helloTimer=setTimeout(()=>{if(channel===c&&!peerPerson){closePeer();connection('Aggiorna il diario su entrambi i dispositivi e riprova');}},10000);}catch{connection('Trasferimento interrotto');}};
+ c.onopen=async()=>{if(channel!==c)return;reportDiagnostic('channel-open');clearInterval(pollTimer);connection('Verifica dei due profili…',true);try{await send({type:'hello',protocol:WIRE_VERSION,person:author,name:personName(),ticket:sessionTicket});c.helloTimer=setTimeout(()=>{if(channel===c&&!peerPerson){closePeer();connection('Aggiorna il diario su entrambi i dispositivi e riprova');}},10000);}catch{connection('Trasferimento interrotto');}};
  c.onclose=()=>{clearTimeout(c.helloTimer);if(channel===c){reportDiagnostic('channel-closed');connection('Diario locale · non collegato');}};
  let receive=Promise.resolve();c.onmessage=e=>{receive=receive.then(()=>{if(channel===c)return receiveFrame(e.data);}).catch(err=>toast('Ricezione non completata: '+err.message));};
 }
@@ -201,11 +206,11 @@ async function receiveFrame(raw){
  if(t.parts.length!==f.count)throw Error('Trasferimento non valido');if(t.parts[f.i]===undefined){t.parts[f.i]=f.chunk;t.received++;}if(t.received!==f.count)return;
  transfers.delete(f.id);const message=JSON.parse(t.parts.join(''));
  if(message.type==='hello'||message.type==='hello-ok'){
-  if(message.protocol!==VERSION||message.ticket!==sessionTicket||!sessionTicket||!Object.hasOwn(people,message.person)){closePeer();connection('Aggiorna il diario su entrambi i dispositivi prima di collegarli');return;}
+  if(message.protocol!==WIRE_VERSION||message.ticket!==sessionTicket||!sessionTicket||!Object.hasOwn(people,message.person)){closePeer();connection('Aggiorna il diario su entrambi i dispositivi prima di collegarli');return;}
   if(message.person===author){closePeer();connection('Entrambi i dispositivi sono di '+personName()+'. Assegna Persona 1 a un dispositivo e Persona 2 all’altro.');return;}
   peerPerson=message.person;peerName=message.name||personName(peerPerson);clearTimeout(channel.helloTimer);
   await store('meta',{id:'partner',person:peerPerson});connection('Collegato con '+peerName,true);
-  if(message.type==='hello')await send({type:'hello-ok',protocol:VERSION,person:author,ticket:sessionTicket});
+  if(message.type==='hello')await send({type:'hello-ok',protocol:WIRE_VERSION,person:author,ticket:sessionTicket});
   else await syncSnapshot();
   return;
  }
@@ -224,7 +229,7 @@ $('manualOffer').onclick=guarded(async()=>{
  saveName();makePeer();role='offer';sessionTicket=uuid();
  bindChannel(pc.createDataChannel('diary'));await pc.setLocalDescription(await pc.createOffer());
  await showSignal({format:'tra-noi-link-v1',ticket:sessionTicket,description:await description(),expires:Date.now()+300000});
- connection('1. L’altro dispositivo scansiona questo QR. Poi tu scansioni la sua risposta.');
+ connection('Mostra questo QR all’altro dispositivo. Quando compare il suo QR di risposta, premi qui “Scansiona il QR dell’altro” e inquadralo.');
 });
 async function acceptSignal(value){
  saveName();const payload=await DiaryLink.decode(value);
@@ -232,7 +237,7 @@ async function acceptSignal(value){
   makePeer();role='answer';sessionTicket=payload.ticket;
   await pc.setRemoteDescription(payload.description);await pc.setLocalDescription(await pc.createAnswer());
   await showSignal({format:'tra-noi-link-v1',ticket:sessionTicket,description:await description(),expires:payload.expires});
-  connection('2. Ora il primo dispositivo deve scansionare il tuo QR di risposta.');
+  connection('Risposta pronta. Sul dispositivo che ti ha mostrato il QR iniziale premi “Scansiona il QR dell’altro” e inquadra questo codice. Il tuo profilo resta lo stesso.');
  }else if(pc&&role==='offer'&&payload.ticket===sessionTicket){
   await pc.setRemoteDescription(payload.description);connection('Connessione diretta in corso…');
  }else throw Error('Questa risposta non appartiene al collegamento aperto. Crea un nuovo QR.');
@@ -242,6 +247,7 @@ async function showSignal(payload){
  const value=await DiaryLink.encode(payload);$('signalOut').value=value;
  try{const code=qrcode(0,'M');code.addData(value);code.make();$('signalQR').innerHTML=code.createSvgTag({scalable:true,margin:4});$('signalQR').setAttribute('aria-label','QR per il collegamento diretto');}
  catch{$('signalQR').textContent='Il codice è troppo grande per un QR: usa il testo qui sotto.';}
+ reportDiagnostic('QR pronto');
 }
 $('copySignal').onclick=async()=>{try{await navigator.clipboard.writeText($('signalOut').value);toast('Codice copiato');}catch{toast('Seleziona e copia il testo del codice');}};
 let cameraStream=null,scanFrame=null;
@@ -261,6 +267,7 @@ $('scanCode').onclick=guarded(async()=>{
  };scan();
 });
 
+let profileBaseline=null;
 function openProfile(){
  const profile=state.profiles[author];profileDraft=profile?.photo||'';
  $('firstNameInput').value=profile?.firstName||(myName==='Io'?'':myName);$('lastNameInput').value=profile?.lastName||'';
@@ -268,11 +275,13 @@ function openProfile(){
  const partner=state.profiles[author==='one'?'two':'one'];
  $('partnerProfile').innerHTML='<span class="avatar">'+avatar(partner,icon('heart'))+'</span><div><p>'+esc(partner?[partner.firstName,partner.lastName].filter(Boolean).join(' '):'Il suo angolino')+'</p><small>'+(partner?'Il profilo dell’altro diario':'Nome e foto da preparare per la sorpresa')+'</small></div>';
  $('partnerFirstName').value=partner?.firstName||'';$('partnerLastName').value=partner?.lastName||'';
+ profileBaseline={own:{firstName:$('firstNameInput').value,lastName:$('lastNameInput').value,photo:profileDraft},partner:{firstName:$('partnerFirstName').value,lastName:$('partnerLastName').value}};
+ $('otherDeviceHelp').textContent='Puoi preparare entrambi i nomi da qui. Sull’altro iPhone scegli '+(author==='one'?'Persona 2':'Persona 1')+': al primo collegamento riceverà i profili che avete preparato. I nomi non sono pubblicati sul sito.';
  $('anniversaryInput').value=state.settings.anniversary||'';renderLegacyProfiles();updateInstallUI();$('profileDialog').showModal();
 }
 $('profileButton').onclick=openProfile;$('installNotice').onclick=openProfile;
 $('profilePhoto').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;await withSave(e.target,async()=>{if(f.size>20*1024*1024)throw Error('Scegli una foto sotto i 20 MB');profileDraft=await mediaURL(f,600);$('profilePreview').innerHTML='<span class="avatar"><img src="'+esc(profileDraft)+'" alt="La tua nuova foto"></span>';});};
-$('profileForm').onsubmit=async e=>{e.preventDefault();await withSave(e.submitter,async()=>{const firstName=$('firstNameInput').value.trim(),lastName=$('lastNameInput').value.trim();if(!firstName)throw Error('Inserisci il nome');await addOp('profile',author,{firstName,lastName,photo:profileDraft});const other=author==='one'?'two':'one',partnerName=$('partnerFirstName').value.trim();if(partnerName)await addOp('profile',other,{firstName:partnerName,lastName:$('partnerLastName').value.trim(),photo:state.profiles[other]?.photo||''},other);myName=personName();$('profileDialog').close();toast('Profili salvati soltanto nel diario');});};
+$('profileForm').onsubmit=async e=>{e.preventDefault();await withSave(e.submitter,async()=>{const draft={own:{firstName:$('firstNameInput').value,lastName:$('lastNameInput').value,photo:profileDraft},partner:{firstName:$('partnerFirstName').value,lastName:$('partnerLastName').value}};const changes=DiaryModel.profileChanges(state.profiles,author,profileBaseline,draft);for(const change of changes)await addOp('profile',change.person,change.data,change.person);myName=personName();$('profileDialog').close();toast(changes.length?'Profili salvati soltanto nel diario':'I profili sono già aggiornati');});};
 $('saveAnniversary').onclick=async()=>{const date=$('anniversaryInput').value;if(!date)return toast('Scegli la data del vostro inizio');await withSave($('saveAnniversary'),async()=>{await addOp('setting','our-story',{key:'anniversary',value:date});toast('Il nostro inizio è aggiornato');});};
 $('coverInput').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;await withSave(e.target,async()=>{if(f.size>20*1024*1024)throw Error('Scegli una foto sotto i 20 MB');const value=await mediaURL(f,2048);await addOp('setting','our-story',{key:'cover',value});toast('Adesso questa Home parla di voi');});};
 function openLetter(id){

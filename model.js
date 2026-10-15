@@ -53,6 +53,19 @@ function validateOp(o){
  if(!ok)throw Error('Contenuto del diario non valido: '+o.kind);
 }
 function activities(ops){return project(ops).memories;}
-root.DiaryModel={project,activities,validateOp,sections,defaults,sectionOf,validDate,people,resolveAuthor};
+function profileChanges(profiles,owner,baseline,draft){
+ if(!Object.hasOwn(people,owner))throw Error('Scegli il profilo di questo dispositivo');
+ const other=owner==='one'?'two':'one',changes=[];
+ for(const [person,part,keys]of [[owner,'own',['firstName','lastName','photo']],[other,'partner',['firstName','lastName']]]){
+  const current=profiles[person]||people[person],next={firstName:current.firstName,lastName:current.lastName,photo:current.photo};let changed=false;
+  for(const key of keys){const value=key==='photo'?draft[part][key]:draft[part][key].trim();if(value!==baseline[part][key]){next[key]=value;changed=true;}}
+  if(!changed)continue;
+  if(!next.firstName.trim())throw Error('Inserisci un nome per ciascun profilo che modifichi');
+  if(!text(next.firstName,40)||!text(next.lastName,60)||!image(next.photo))throw Error('Profilo non valido');
+  if(['firstName','lastName','photo'].some(key=>next[key]!==current[key]))changes.push({person,data:next});
+ }
+ return changes;
+}
+root.DiaryModel={project,activities,validateOp,sections,defaults,sectionOf,validDate,people,resolveAuthor,profileChanges};
 if(typeof module!=='undefined')module.exports=root.DiaryModel;
 })(globalThis);
