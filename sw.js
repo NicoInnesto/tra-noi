@@ -1,6 +1,6 @@
 'use strict';
-const VERSION=17,BASE=new URL('./',self.location.href),CACHE='tra-noi-pages-'+BASE.pathname+'-v17';
-const relative=['index.html?v=17','style.css?v=17','boot.js?v=17','model.js?v=17','offline.js?v=17','link.js?v=17','access.js?v=17','app.js?v=17','manifest.json','manifest-one.json','manifest-two.json','icon.svg','icon-192.png','icon-512.png','apple-touch-icon.png','vendor/qrcode.js','vendor/jsqr.js','installazione.html'];
+const VERSION=18,BASE=new URL('./',self.location.href),CACHE='tra-noi-pages-'+BASE.pathname+'-v18';
+const relative=['index.html?v=18','style.css?v=18','boot.js?v=18','model.js?v=18','offline.js?v=18','link.js?v=18','interaction.js?v=18','access.js?v=18','app.js?v=18','manifest.json','manifest-one.json','manifest-two.json','icon.svg','icon-192.png','icon-512.png','apple-touch-icon.png','vendor/qrcode.js','vendor/jsqr.js','installazione.html'];
 const ASSETS=relative.map(p=>new URL(p,BASE).href),SHELL=ASSETS[0];
 self.addEventListener('install',e=>e.waitUntil((async()=>{const cache=await caches.open(CACHE);await cache.addAll(ASSETS);await self.skipWaiting();})()));
 self.addEventListener('activate',e=>e.waitUntil((async()=>{for(const key of await caches.keys())if(key!==CACHE&&key.startsWith('tra-noi-pages-'+BASE.pathname+'-v'))await caches.delete(key);await self.clients.claim();})()));

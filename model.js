@@ -50,6 +50,7 @@ function validateOp(o){
  if(o.kind==='identity')ok=text(d.legacy,120)&&!!d.legacy&&!Object.hasOwn(people,d.legacy)&&text(d.person,120)&&!!d.person&&d.person!==d.legacy&&o.author===d.person;
  if(o.kind==='profile')ok=text(d.firstName,40)&&!!d.firstName.trim()&&text(d.lastName,60)&&image(d.photo);
  if(o.kind==='setting')ok=d.key==='cover'&&image(d.value)||d.key==='anniversary'&&validDate(d.value)&&!!d.value;
+ if(o.kind==='setting'&&d.key==='anniversaryStart')ok=!!d.value&&validDate(d.value.date)&&!!d.value.date&&typeof d.value.time==='string'&&/^([01]\d|2[0-3]):[0-5]\d$/.test(d.value.time)&&typeof d.value.instant==='string'&&/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:00\.000Z$/.test(d.value.instant)&&Number.isFinite(Date.parse(d.value.instant));
  if(o.kind==='letter')ok=text(d.title,120)&&!!d.title.trim()&&text(d.body,20000)&&!!d.body.trim();
  if(o.kind==='game')ok=text(d.title,120)&&!!d.title.trim()&&['quiz','conversation','truefalse','truthdare'].includes(d.type)&&Array.isArray(d.questions)&&d.questions.length>=1&&d.questions.length<=10&&d.questions.every(q=>text(q.text,500)&&!!q.text.trim()&&(d.type!=='quiz'||Array.isArray(q.options)&&q.options.length===4&&q.options.every(x=>text(x,200)&&!!x.trim())&&Number.isInteger(q.correct)&&q.correct>=0&&q.correct<4));
  if(o.kind==='game-result')ok=Number.isInteger(d.total)&&d.total>=1&&d.total<=10&&Number.isInteger(d.score)&&d.score>=0&&d.score<=d.total;
