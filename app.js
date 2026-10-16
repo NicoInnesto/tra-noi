@@ -1,6 +1,6 @@
 'use strict';
 window.diaryBoot=window.diaryBoot||{phase:'Caricamento del diario',ready:false};
-const VERSION=22;
+const VERSION=23;
 const WIRE_VERSION=22;
 const uuid=()=>crypto.randomUUID?crypto.randomUUID():([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g,c=>(c^crypto.getRandomValues(new Uint8Array(1))[0]&15>>c/4).toString(16));
 const $=id=>document.getElementById(id);
@@ -541,6 +541,7 @@ function measureScreen(){
  const probe=getComputedStyle($('viewportProbe')),nav=$('bottomNav').getBoundingClientRect(),shell=document.querySelector('.app-shell').getBoundingClientRect(),round=n=>Math.round(n||0);
  $('screenMeasurements').value=[
  'Versione app: '+VERSION,
+ 'Avvio schermo: '+(window.DiaryViewport?.status||'non disponibile'),
  'Modalità: '+(DiaryOffline.isInstalled()?'app Home':'browser'),
  'Schermo: '+screen.width+' × '+screen.height,
  'Finestra: '+innerWidth+' × '+innerHeight,
