@@ -4,5 +4,6 @@
 *.p12
 *.pfx
 backup*
+!backup.js
 tra-noi-*.json
 .DS_Store

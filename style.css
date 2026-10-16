@@ -140,3 +140,32 @@ body.guide-body{height:auto;min-height:100svh;overflow:auto}.guide-page{max-widt
 .country-list{margin-top:24px}.country-row{display:flex;align-items:center;justify-content:space-between;gap:15px;border-bottom:1px solid var(--line);padding:6px 0}.country-row .subtle-remove{margin:0;flex-shrink:0}
 .stat-strip span{white-space:normal}
 @media(max-width:420px){.stat-strip div{flex-direction:column;align-items:center;gap:1px}.stat-strip span{font-size:10px;text-align:center}.world-brand{font-size:25px}.profile-corner{max-width:110px}}
+
+/* Release 1.0: crisp header and an ordered cool palette in both appearances. */
+.app-header{position:relative;z-index:2;background:var(--bg);filter:none;-webkit-backdrop-filter:none;backdrop-filter:none;isolation:isolate}
+.world-brand{font-size:29px;opacity:1;filter:none}.profile-corner .avatar-button{width:48px;height:48px;filter:none;opacity:1;transform:none}
+.profile-corner .avatar-button img{image-rendering:auto;filter:none;opacity:1;transform:none}
+.forever-symbol{font-family:var(--sans);font-weight:300;white-space:nowrap}
+@media(max-width:759px){.world-brand{font-size:27px}.profile-corner .avatar-button{width:45px;height:45px}}
+.collection-card.tone-experiences{--tile-accent:#cbb4f0;background:linear-gradient(125deg,#413354,#30233e)}
+.collection-card.tone-trips{--tile-accent:#dfb8e7;background:linear-gradient(125deg,#49324e,#35243e)}
+.collection-card.tone-holidays{--tile-accent:#efbdd8;background:linear-gradient(125deg,#4c3047,#38243b)}
+.collection-card.tone-gifts{--tile-accent:#c6bfee;background:linear-gradient(125deg,#383755,#28283f)}
+.collection-card.tone-dance{--tile-accent:#b4c9f0;background:linear-gradient(125deg,#2d3d58,#242e43)}
+.collection-card.tone-letters{--tile-accent:#b5dfeb;background:linear-gradient(125deg,#2d4656,#233542)}
+[data-theme=light] .collection-card.tone-experiences{--tile-accent:#75518f;background:linear-gradient(125deg,#e9dcf5,#f1e9f7)}
+[data-theme=light] .collection-card.tone-trips{--tile-accent:#925b9c;background:linear-gradient(125deg,#eedcee,#f7edf7)}
+[data-theme=light] .collection-card.tone-holidays{--tile-accent:#a65380;background:linear-gradient(125deg,#f4dce8,#f9edf4)}
+[data-theme=light] .collection-card.tone-gifts{--tile-accent:#68669f;background:linear-gradient(125deg,#e2e0f3,#f0eef9)}
+[data-theme=light] .collection-card.tone-dance{--tile-accent:#506f9c;background:linear-gradient(125deg,#dce5f6,#edf2fa)}
+[data-theme=light] .collection-card.tone-letters{--tile-accent:#46768a;background:linear-gradient(125deg,#d8edf2,#eaf5f8)}
+#detailDialog>.media-upload{margin:0 0 22px;padding:0;border:0}
+#detailDialog .upload-label{margin:0;border-style:solid;background:var(--card);min-height:52px}
+#detailDialog .media-upload .field-help{margin:8px 0 0;font-size:10px}
+.video-open{position:relative;cursor:pointer}.video-open video{pointer-events:none}.video-badge{position:absolute;left:10px;bottom:10px;border-radius:20px;background:#170e1dcc;color:#fff;padding:4px 9px;font-size:11px}
+.photo-slide video{width:100%;height:100%;object-fit:contain;max-height:none}
+.photo-slide img{cursor:pointer}
+
+.collection-card>.tile-icon{color:var(--tile-accent,var(--pink))}
+
+[data-theme=light] .stat-strip strong{color:#8a456b}[data-theme=light] .home-topline span:last-child{color:var(--muted)}

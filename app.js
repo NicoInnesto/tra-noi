@@ -1,6 +1,7 @@
 'use strict';
 window.diaryBoot=window.diaryBoot||{phase:'Caricamento del diario',ready:false};
-const VERSION=29;
+const VERSION=30;
+const RELEASE='1.0';
 const WIRE_VERSION=29;
 const uuid=()=>crypto.randomUUID?crypto.randomUUID():([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g,c=>(c^crypto.getRandomValues(new Uint8Array(1))[0]&15>>c/4).toString(16));
 const $=id=>document.getElementById(id);
@@ -42,6 +43,7 @@ const gameTypes={
  truthdare:{title:'Obbligo o verità',subtitle:'Qualcosa da dire. Qualcosa da fare.',icon:'sparkle'},
  truefalse:{title:'Vero o falso',subtitle:'A te la parola, poi ne parliamo.',icon:'check'}
 };
+let preparedBackup=null;
 let diagnosticTimer,connectionBusy=false,localIceServers=[];
 let accessPolicy=null,adminVault=null,adminKey=null;
 let author=settingsStorage.getItem('diary-author');
@@ -64,12 +66,12 @@ let removalAction=null;
 function confirmRemoval(title,description,perform){removalAction=perform;$('manageDeleteTitle').textContent=title;$('manageDeleteDescription').textContent=description;$('manageDeleteDialog').showModal();}
 $('manageDeleteConfirm').onclick=async e=>withSave(e.currentTarget,async()=>{const perform=removalAction;if(!perform)return;const message=await perform();$('manageDeleteDialog').close();toast(message||'Eliminato. La modifica sarà condivisa al prossimo collegamento.');});
 $('manageDeleteDialog').addEventListener('close',()=>{removalAction=null;});
-const profileSections={profile:['user','Il mio profilo','Foto e dati personali'],cover:['camera','Foto della Home','L’immagine della vostra storia'],connect:['link','Collega i diari','Collegamento diretto con QR'],theme:['sparkle','Aspetto','Chiaro, scuro o automatico'],updates:['clock','Aggiornamenti','Versione '+VERSION],installation:['home','Installazione','La guida per il tuo iPhone'],backup:['album','Backup e ripristino','Una copia dei vostri ricordi'],date:['calendar','La nostra data','Il giorno in cui è iniziato tutto'],screen:['check','Schermo e assistenza','Layout e diagnostica locale'],admin:['lock','Amministrazione','Gestione dei due profili']};
+const profileSections={profile:['user','Il mio profilo','Foto e dati personali'],cover:['camera','Foto della Home','L’immagine della vostra storia'],connect:['link','Collega i diari','Collegamento diretto con QR'],theme:['sparkle','Aspetto','Chiaro, scuro o automatico'],updates:['clock','Aggiornamenti','Versione '+RELEASE],installation:['home','Installazione','La guida per il tuo iPhone'],backup:['album','Backup e ripristino','Una copia dei vostri ricordi'],date:['calendar','La nostra data','Il giorno in cui è iniziato tutto'],screen:['check','Schermo e assistenza','Layout e diagnostica locale'],admin:['lock','Amministrazione','Gestione dei due profili']};
 function updateProfileMenu(){
  if(!state)return;
  $('profileSummary').innerHTML='<span class="avatar">'+avatar(state.profiles[author])+'</span><h3>'+esc(personName())+'</h3>';
  if(!$('profileMenu').children.length)$('profileMenu').innerHTML=Object.entries(profileSections).map(([key,[ic,title,detail]])=>'<button class="settings-row" data-profile-section="'+key+'" '+(key==='admin'?'id="profileAdminRow"':'')+'><span class="settings-row-icon">'+icon(ic)+'</span><span><strong>'+title+'</strong><small>'+detail+'</small></span>'+icon('right','settings-chevron')+'</button>').join('');
- updateCoverSettings();$('profileAdminRow').hidden=author!=='one';$('appVersion').textContent=String(VERSION);
+ updateCoverSettings();$('profileAdminRow').hidden=author!=='one';$('appVersion').textContent=RELEASE+' · build '+VERSION;
 }
 function showProfileSection(section){
  if(section!=='home'&&!Object.hasOwn(profileSections,section)||section==='admin'&&author!=='one')return;
@@ -97,7 +99,7 @@ function mergeOperations(incoming,administration=null){
    if(administration)tx.objectStore('meta').put({id:'administration',...administration});
    tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error);
   });
-  ops=next;for(const op of purged)acks.delete(op.id);return fresh.length;
+  ops=next;preparedBackup=null;for(const op of purged)acks.delete(op.id);return fresh.length;
  };
  const result=mutationTail.then(task);mutationTail=result.catch(()=>{});return result;
 }
@@ -146,7 +148,7 @@ function render(){
 }
 function renderHome(){
  const date=state.settings.anniversaryStart?.date||state.settings.anniversary||'',upcomingCount=state.countdowns.filter(c=>DiaryInteraction.countdownDays(c.date)>=0).length;
- return '<div class="home-topline"><span>'+esc(capitalize(new Date().toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long'})))+'</span><span>'+icon('lock')+'Il nostro spazio</span></div><div class="home-layout"><div><section class="hero">'+(state.settings.cover?'<img class="hero-image" src="'+esc(state.settings.cover)+'" alt="La nostra foto">':'<div class="hero-orbit"></div><div class="hero-orbit second"></div><div class="hero-heart">'+icon('heart')+'</div>')+'<div class="hero-content"><div><span class="hero-kicker">LA NOSTRA STORIA</span><h1>Tu, io<br><em>Tutto il resto</em></h1></div><div class="together"><div class="together-title">Insieme da</div><div class="counter" aria-label="Tempo trascorso insieme"><div><strong id="days">—</strong><span>giorni</span></div><div><strong id="hours">—</strong><span>ore</span></div><div><strong id="minutes">—</strong><span>minuti</span></div><div><strong id="seconds">—</strong><span>secondi</span></div></div><p class="together-since">'+(date?'Dal '+esc(formatDate(date))+(state.settings.anniversaryStart?' · ore '+esc(state.settings.anniversaryStart.time):''):'Scegli la vostra data nel profilo')+'</p></div></div></section><div class="stat-strip"><div><strong>'+state.memories.length+'</strong><span>Ricordi</span></div><div><strong>'+state.countries.length+'</strong><span>Paesi visitati</span></div><div><strong>'+upcomingCount+'</strong><span>Countdown</span></div></div></div><div class="home-side"><div class="section-heading"><h2>I nostri traguardi</h2><button class="text-button" data-view="ricordi">Esplora '+icon('right')+'</button></div><div class="collection-grid">'+Object.keys(sectionInfo).map(key=>collectionTile(key)).join('')+'<button class="collection-card tone-letters" data-view="lettere"><span class="tile-icon">'+icon('letter')+'</span><strong>Ti lascio un pensiero</strong><small>Una lettera per te.</small>'+icon('right','chevron')+'</button></div></div></div>';
+ return '<div class="home-topline"><span>'+esc(capitalize(new Date().toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long'})))+'</span><span>'+icon('lock')+'Il nostro spazio</span></div><div class="home-layout"><div><section class="hero">'+(state.settings.cover?'<img class="hero-image" src="'+esc(state.settings.cover)+'" alt="La nostra foto">':'<div class="hero-orbit"></div><div class="hero-orbit second"></div><div class="hero-heart">'+icon('heart')+'</div>')+'<div class="hero-content"><div><span class="hero-kicker">LA NOSTRA STORIA</span><h1>Tu, io<br><em>Per sempre <span class="forever-symbol" aria-label="infinito">∞</span></em></h1></div><div class="together"><div class="together-title">Insieme da</div><div class="counter" aria-label="Tempo trascorso insieme"><div><strong id="days">—</strong><span>giorni</span></div><div><strong id="hours">—</strong><span>ore</span></div><div><strong id="minutes">—</strong><span>minuti</span></div><div><strong id="seconds">—</strong><span>secondi</span></div></div><p class="together-since">'+(date?'Dal '+esc(formatDate(date))+(state.settings.anniversaryStart?' · ore '+esc(state.settings.anniversaryStart.time):''):'Scegli la vostra data nel profilo')+'</p></div></div></section><div class="stat-strip"><div><strong>'+state.memories.length+'</strong><span>Ricordi</span></div><div><strong>'+state.countries.length+'</strong><span>Paesi visitati</span></div><div><strong>'+upcomingCount+'</strong><span>Countdown</span></div></div></div><div class="home-side"><div class="section-heading"><h2>I nostri traguardi</h2><button class="text-button" data-view="ricordi">Esplora '+icon('right')+'</button></div><div class="collection-grid">'+Object.keys(sectionInfo).map(key=>collectionTile(key)).join('')+'<button class="collection-card tone-letters" data-view="lettere"><span class="tile-icon">'+icon('letter')+'</span><strong>Ti lascio un pensiero</strong><small>Una lettera per te.</small>'+icon('right','chevron')+'</button></div></div></div>';
 }
 function tickCounter(){
  tickCountdowns();
@@ -320,7 +322,7 @@ $('createForm').onsubmit=async e=>{e.preventDefault();const s=$('sectionInput').
 $('categoryForm').onsubmit=async e=>{e.preventDefault();const name=$('categoryName').value.trim();if(!name)return;if(state.categories.some(c=>c.toLocaleLowerCase()===name.toLocaleLowerCase()))return toast('Questa categoria esiste già');await withSave(e.submitter,async()=>{await addOp('category',uuid(),{name});$('categoryDialog').close();selected=name;render();toast('La vostra nuova categoria è pronta');});};
 async function withSave(button,fn){if(button?.disabled)return;if(button)button.disabled=true;try{await fn();}catch(e){toast(e.message||'Salvataggio non riuscito');}finally{if(button)button.disabled=false;}}
 function renderMediaGallery(a){
- const visible=a.media.map(m=>'<figure class="media-item">'+(m.type.startsWith('image/')?'<button class="photo-open" data-photo-open="'+esc(m.id)+'" aria-label="Apri foto: '+esc(m.name)+'"><img src="'+esc(m.url)+'" alt="'+esc(m.name)+'" loading="lazy"></button>':'<video controls playsinline preload="metadata" src="'+esc(m.url)+'"></video>')+'<div class="media-actions"><button class="text-button" data-media-id="'+esc(m.id)+'" data-media-removed="true">Rimuovi dal ricordo</button><button class="text-button danger-button" data-delete-media="'+esc(m.id)+'">Elimina definitivamente</button></div></figure>').join('');
+ const visible=a.media.map(m=>'<figure class="media-item">'+(m.type.startsWith('image/')?'<button class="photo-open" data-photo-open="'+esc(m.id)+'" aria-label="Apri foto: '+esc(m.name)+'"><img src="'+esc(m.url)+'" alt="'+esc(m.name)+'" loading="lazy"></button>':'<button class="photo-open video-open" data-photo-open="'+esc(m.id)+'" aria-label="Apri video: '+esc(m.name)+'"><video muted playsinline preload="metadata" src="'+esc(m.url)+'"></video><span class="video-badge">▶ Video</span></button>')+'<div class="media-actions"><button class="text-button" data-media-id="'+esc(m.id)+'" data-media-removed="true">Rimuovi dal ricordo</button><button class="text-button danger-button" data-delete-media="'+esc(m.id)+'">Elimina definitivamente</button></div></figure>').join('');
  const removed=a.removedMedia||[];
  return '<div class="gallery">'+visible+'</div>'+(removed.length?'<details class="removed-media"><summary>Foto e video rimossi ('+removed.length+')</summary><p class="field-help">Puoi ripristinarli. La rimozione non libera spazio e non modifica la galleria Foto dell’iPhone.</p>'+removed.map(m=>'<div class="removed-media-row"><span>'+esc(m.name)+'</span><button class="text-button" data-media-id="'+esc(m.id)+'" data-media-removed="false">Ripristina</button><button class="text-button danger-button" data-delete-media="'+esc(m.id)+'">Elimina definitivamente</button></div>').join('')+'</details>':'');
 }
@@ -343,7 +345,7 @@ function renderDetail(){
 }
 $('mediaInput').onchange=async e=>{
  const files=[...e.target.files],target=active;e.target.value='';if(!target)return;
- await withSave(e.target,async()=>{for(const f of files){if(!f.type.startsWith('image/')&&!f.type.startsWith('video/')&&!/\.(heic|heif)$/i.test(f.name)){toast('Scegli una foto o un video');continue;}if(f.size>20*1024*1024){toast('Questo file supera il limite di 20 MB');continue;}const url=await mediaURL(f);await addOp('media',target,{url,type:url.startsWith('data:image/jpeg')?'image/jpeg':f.type,name:f.name});toast('Un altro momento nell’album');}});
+ await withSave(e.target,async()=>{for(const f of files){if(!f.type.startsWith('image/')&&!f.type.startsWith('video/')&&!/\.(heic|heif)$/i.test(f.name)){toast('Scegli una foto o un video');continue;}if(f.size>20*1024*1024){toast('Questo file supera il limite di 20 MB');continue;}const url=await mediaURL(f);await addOp('media',target,{url,type:url.slice(5,url.indexOf(';')),name:f.name});toast('Un altro momento nell’album');}});
 };
 async function mediaURL(f,maxDimension=0){
  const url=await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=()=>reject(Error('File non leggibile'));r.readAsDataURL(f);});
@@ -514,30 +516,36 @@ document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>b.closest('di
 $('detailDialog').addEventListener('close',()=>{active=null;renderedActivity=null;});
 $('letterDialog').addEventListener('close',()=>{activeLetterId=null;$('letterContent').replaceChildren();});
 $('linkIcon').innerHTML=icon('link');$('uploadIcon').innerHTML=icon('camera');
-function completeBackup(){
+async function completeBackup(){
  if(!accessPolicy||author!=='one'||!adminKey||!adminVault)throw Error('Configura e sblocca l’amministrazione per creare il backup completo');
- return new File([JSON.stringify({format:'tra-noi-v4',exportedAt:new Date().toISOString(),identity:{person:author},access:{policy:accessPolicy,vault:adminVault},ops})],'Il nostro mondo - '+localDay()+' - '+new Date().toTimeString().slice(0,8).replaceAll(':','-')+'.json',{type:'application/json'});
+ return DiaryBackup.create({format:'tra-noi-v4',exportedAt:new Date().toISOString(),identity:{person:author},access:{policy:accessPolicy,vault:adminVault},ops:[...ops]},'Il nostro mondo - '+localDay()+' - '+new Date().toTimeString().slice(0,8).replaceAll(':','-')+'.json',p=>{$('backupProgress').textContent='Preparazione backup: '+p.done+' / '+p.total+' elementi';});
 }
 function downloadBackup(file){const url=URL.createObjectURL(file),a=document.createElement('a');a.href=url;a.download=file.name;a.click();setTimeout(()=>URL.revokeObjectURL(url),60000);}
-$('export').onclick=async()=>withSave($('export'),async()=>{downloadBackup(completeBackup());toast('Copia preparata: salvala nella cartella dei backup sul Mac');});
+$('export').onclick=async()=>withSave($('export'),async()=>{
+ preparedBackup=null;updateAdministrationUI();preparedBackup=await completeBackup();if(!adminKey){preparedBackup=null;throw Error('Sblocca nuovamente l’amministrazione');}
+ updateAdministrationUI();$('backupProgress').textContent='Backup pronto: premi Salva backup oppure Condividi per inviarlo al Mac';
+});
+$('downloadPrepared').onclick=()=>{if(!preparedBackup||!adminKey)return;downloadBackup(preparedBackup);toast('Salva il file nella cartella dei backup');};
 $('shareBackup').onclick=async()=>withSave($('shareBackup'),async()=>{
- const file=completeBackup();
- if(navigator.canShare?.({files:[file]})){try{await navigator.share({files:[file],title:'Backup del diario'});}catch(e){if(e.name!=='AbortError')throw e;}}
- else{downloadBackup(file);toast('Copia preparata: puoi trasferire il file al Mac');}
+ if(!preparedBackup||!adminKey)throw Error('Prepara prima il backup');
+ try{await navigator.share({files:[preparedBackup],title:'Backup del diario'});$('backupProgress').textContent='Backup condiviso: verifica di averlo conservato sul Mac';}
+ catch(e){if(e.name!=='AbortError'){$('backupProgress').textContent='Puoi usare Salva backup e poi condividerlo da File';throw e;}}
 });
 $('importButton').onclick=()=>$('importFile').click();
 $('importFile').onchange=async e=>{
  const file=e.target.files[0];e.target.value='';if(!file)return;
  await withSave(e.target,async()=>{
-  if(file.size>150*1024*1024)throw Error('Questa copia supera il limite di importazione di 150 MB');
-  const data=JSON.parse(await file.text());if(!['tra-noi-v1','tra-noi-v2','tra-noi-v3','tra-noi-v4'].includes(data.format)||!Array.isArray(data.ops))throw Error('Formato di backup non riconosciuto');
+  try{
+  const data=await DiaryBackup.read(file,p=>{$('backupProgress').textContent='Lettura backup: '+Math.min(100,Math.floor(p.loaded/Math.max(1,p.total)*100))+'%';});
+  $('backupProgress').textContent='Verifica del backup prima del ripristino…';
   const policy=data.access?.policy?await DiaryAccess.matchPolicy(accessPolicy,data.access.policy):accessPolicy;
   for(const op of data.ops){validateOp(op);await DiaryAccess.authorize(op,policy);}
   for(const op of ops)await DiaryAccess.authorize(op,policy);
   const vault=author==='one'?(adminVault||data.access?.vault||null):null;
   await mergeOperations(data.ops,policy?{policy,vault}:null);
-  accessPolicy=policy;adminVault=vault;render();renderLegacyProfiles();closePeer();if($('profileDialog').open)openProfile();
+  accessPolicy=policy;adminVault=vault;$('backupProgress').textContent='Backup verificato e recuperato';render();renderLegacyProfiles();closePeer();if($('profileDialog').open)openProfile();
   toast('Backup recuperato. Il profilo di questo dispositivo resta '+personName()+'. Ricollega i diari per condividere il recupero.');
+  }catch(error){$('backupProgress').textContent='Ripristino non completato: '+error.message;throw error;}
  });
 };
 document.addEventListener('visibilitychange',()=>{reportDiagnostic('visibility');if(!document.hidden)tickCounter();});
@@ -614,7 +622,8 @@ function updateAdministrationUI(){
  for(const id of ['firstNameInput','lastNameInput','nicknameInput','profilePhoto'])$(id).disabled=ownLocked;
  for(const id of ['partnerFirstName','partnerLastName','partnerNickname'])$(id).disabled=!unlocked;
  $('otherDeviceHelp').textContent=unlocked?'Puoi modificare entrambi i nomi. I profili saranno trasferiti al collegamento successivo e non vengono pubblicati sul sito.':'Puoi modificare soltanto il tuo profilo. Il telefono dell’altra persona mantiene i propri dati e permessi.';
- $('export').hidden=!unlocked;$('shareBackup').hidden=!unlocked;
+ if(!unlocked)preparedBackup=null;
+ $('export').hidden=!unlocked;$('downloadPrepared').hidden=!unlocked||!preparedBackup;$('shareBackup').hidden=!unlocked||!preparedBackup||!navigator.canShare?.({files:[preparedBackup]});
  $('backupHelp').textContent='Il backup completo comprende i contributi di entrambi presenti su questo iPhone e la chiave amministratore protetta dalla password. Sincronizza prima i diari, poi salva il file sul Mac. I contenuti del backup sono leggibili: conservalo come le tue foto private. Il Mac non deve restare collegato.';
  $('deviceOwner').textContent=personName()+(configured?(ownAdmin?' · Amministratore':' · Utente'):'');
 }
@@ -642,7 +651,7 @@ $('saveLegacy').onclick=async()=>withSave($('saveLegacy'),async()=>{for(const no
 function measureScreen(){
  const probe=getComputedStyle($('viewportProbe')),nav=$('bottomNav').getBoundingClientRect(),shell=document.querySelector('.app-shell').getBoundingClientRect(),round=n=>Math.round(n||0);
  $('screenMeasurements').value=[
- 'Versione app: '+VERSION,
+ 'Versione app: '+VERSION+' (1.0)',
  'Avvio schermo: '+(window.DiaryViewport?.status||'non disponibile'),
  'Modalità: '+(DiaryOffline.isInstalled()?'app Home':'browser'),
  'Schermo: '+screen.width+' × '+screen.height,
@@ -669,21 +678,24 @@ $('confirmDeleteMemory').onclick=async e=>withSave(e.currentTarget,async()=>{
 $('deleteMemoryDialog').addEventListener('close',()=>{deleteMemoryId=null;});
 let photoViewerItems=[],photoViewerIndex=0;
 function openPhotoViewer(id){
- const memory=state.memories.find(m=>m.id===active);photoViewerItems=(memory?.media||[]).filter(m=>m.type.startsWith('image/'));
+ const memory=state.memories.find(m=>m.id===active);photoViewerItems=(memory?.media||[]);
  photoViewerIndex=photoViewerItems.findIndex(m=>m.id===id);if(photoViewerIndex<0)return;
- $('photoStrip').innerHTML=photoViewerItems.map(m=>'<figure class="photo-slide"><img src="'+esc(m.url)+'" alt="'+esc(m.name)+'" draggable="false"></figure>').join('');
+ $('photoStrip').innerHTML=photoViewerItems.map(m=>'<figure class="photo-slide">'+(m.type.startsWith('image/')?'<img src="'+esc(m.url)+'" alt="'+esc(m.name)+'" draggable="false">':'<video controls playsinline preload="metadata" src="'+esc(m.url)+'" aria-label="'+esc(m.name)+'"></video>')+'</figure>').join('');
  $('photoViewer').showModal();$('photoStrip').scrollTo({left:photoViewerIndex*$('photoStrip').clientWidth,behavior:'instant'});updatePhotoPosition();
 }
 function updatePhotoPosition(){
+ const oldIndex=photoViewerIndex;
  photoViewerIndex=Math.max(0,Math.min(photoViewerItems.length-1,Math.round($('photoStrip').scrollLeft/Math.max(1,$('photoStrip').clientWidth))));
+ if(photoViewerIndex!==oldIndex)for(const v of $('photoStrip').querySelectorAll('video'))v.pause();
  $('photoPosition').textContent=(photoViewerIndex+1)+' / '+photoViewerItems.length;
  $('previousPhoto').disabled=photoViewerIndex<=0;$('nextPhoto').disabled=photoViewerIndex>=photoViewerItems.length-1;
 }
 function movePhoto(delta){const index=Math.max(0,Math.min(photoViewerItems.length-1,photoViewerIndex+delta));$('photoStrip').scrollTo({left:index*$('photoStrip').clientWidth,behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'});}
 $('photoStrip').addEventListener('scroll',updatePhotoPosition,{passive:true});
+$('photoStrip').addEventListener('click',e=>{if(e.target.tagName==='IMG')movePhoto(1);});
 $('previousPhoto').onclick=()=>movePhoto(-1);$('nextPhoto').onclick=()=>movePhoto(1);
 $('photoViewer').addEventListener('keydown',e=>{if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();movePhoto(e.key==='ArrowLeft'?-1:1);}});
-$('photoViewer').addEventListener('close',()=>{$('photoStrip').replaceChildren();photoViewerItems=[];});
+$('photoViewer').addEventListener('close',()=>{for(const v of $('photoStrip').querySelectorAll('video'))v.pause();$('photoStrip').replaceChildren();photoViewerItems=[];});
 let pageTouch=null;
 $('view').addEventListener('touchstart',e=>{
  pageTouch=null;
