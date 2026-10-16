@@ -1,6 +1,6 @@
 (function(root){
 'use strict';
-const VERSION=28;let current={phase:'waiting',ready:false,version:VERSION,message:'Preparazione della copia offline…'},running=null,registration;
+const VERSION=29;let current={phase:'waiting',ready:false,version:VERSION,message:'Preparazione della copia offline…'},running=null,registration;
 function emit(next){current={...current,...next};root.dispatchEvent(new CustomEvent('diary-offline',{detail:current}));return current;}
 function limit(promise,ms,message){return new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error(message)),ms);promise.then(value=>{clearTimeout(timer);resolve(value);},error=>{clearTimeout(timer);reject(error);});});}
 function isInstalled(){return navigator.standalone===true||root.matchMedia('(display-mode: standalone)').matches;}

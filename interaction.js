@@ -6,6 +6,10 @@ function countdownDays(date,now=Date.now()){
  const [y,m,d]=date.split('-').map(Number);
  return Math.round((Date.UTC(y,m-1,d)-Date.UTC(Number(parts.year),Number(parts.month)-1,Number(parts.day)))/86400000);
 }
+function dayLabel(date,now=Date.now()){
+ const days=countdownDays(date,now);
+ return days===0?'Oggi':days===1?'Domani':days===-1?'Ieri':days>0?'Tra '+days+' giorni':Math.abs(days)+' giorni fa';
+}
 function swipePage(current,start,end){
  const dx=end.x-start.x,dy=end.y-start.y,index=pages.indexOf(current==='lettere'?'ricordi':current);
  if(index<0||end.time-start.time>750||Math.abs(dx)<75||Math.abs(dx)<Math.abs(dy)*1.8)return null;
@@ -28,6 +32,6 @@ function counterParts(settings,now=Date.now()){
  return {days:Math.floor(elapsed/86400),hours:Math.floor(elapsed/3600)%24,minutes:Math.floor(elapsed/60)%60,seconds:elapsed%60};
 }
 function navIndex(x,left,right,count){return Math.max(0,Math.min(count-1,Math.floor((x-left)/Math.max(1,right-left)*count)));}
-root.DiaryInteraction={pages,swipePage,startInstant,counterParts,navIndex,countdownDays};
+root.DiaryInteraction={pages,swipePage,startInstant,counterParts,navIndex,countdownDays,dayLabel};
 if(typeof module!=='undefined')module.exports=root.DiaryInteraction;
 })(globalThis);

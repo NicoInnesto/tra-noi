@@ -2,6 +2,7 @@
 'use strict';
 const sections={experiences:'Esperienze',trips:'Vacanze e weekend',holidays:'Festività',gifts:'Regali',dance:'Danza'};
 const people={one:{id:'one',firstName:'Persona 1',lastName:'',photo:''},two:{id:'two',firstName:'Persona 2',lastName:'',photo:''}};
+const countryCodes='AD AE AF AG AI AL AM AO AQ AR AS AT AU AW AX AZ BA BB BD BE BF BG BH BI BJ BL BM BN BO BQ BR BS BT BV BW BY BZ CA CC CD CF CG CH CI CK CL CM CN CO CR CU CV CW CX CY CZ DE DJ DK DM DO DZ EC EE EG EH ER ES ET FI FJ FK FM FO FR GA GB GD GE GF GG GH GI GL GM GN GP GQ GR GS GT GU GW GY HK HM HN HR HT HU ID IE IL IM IN IO IQ IR IS IT JE JM JO JP KE KG KH KI KM KN KP KR KW KY KZ LA LB LC LI LK LR LS LT LU LV LY MA MC MD ME MF MG MH MK ML MM MN MO MP MQ MR MS MT MU MV MW MX MY MZ NA NC NE NF NG NI NL NO NP NR NU NZ OM PA PE PF PG PH PK PL PM PN PR PS PT PW PY QA RE RO RS RU RW SA SB SC SD SE SG SH SI SJ SK SL SM SN SO SR SS ST SV SX SY SZ TC TD TF TG TH TJ TK TL TM TN TO TR TT TV TW TZ UA UG UM US UY UZ VA VC VE VG VI VN VU WF WS YE YT ZA ZM ZW'.split(' ');
 const defaults=['Cinema','Film a casa','Ristoranti','Concerti','Teatro'];
 function ordered(ops){return [...ops].sort((a,b)=>a.time-b.time||a.id.localeCompare(b.id));}
 function sectionOf(a){const legacy={Viaggi:'trips',Vacanze:'trips',Danza:'dance',Regali:'gifts','Festività':'holidays'};return a.section||(Object.hasOwn(legacy,a.category)?legacy[a.category]:'experiences');}
@@ -39,6 +40,7 @@ function compactOps(ops){
 }
 function project(ops){
  ops=compactOps(ops);
+ const countryStates=new Map();
  const memories=new Map(),countdowns=new Map(),mediaStates=new Map(),categories=new Set(defaults),customCategories=new Map(),hiddenCategories=new Set(),profiles=Object.create(null),settings=Object.create(null),letters=new Map(),games=new Map(),results=[];
  for(const [id,p]of Object.entries(people))profiles[id]={...p};
  const identities=aliases(ops);
@@ -47,6 +49,7 @@ function project(ops){
   if(op.kind==='category'){categories.add(op.data.name);hiddenCategories.delete(op.data.name);customCategories.set(op.data.name,{id:op.activity,name:op.data.name,author:op.author});}
   if(op.kind==='delete-category')hiddenCategories.add(op.data.name);
   if(op.kind==='profile')profiles[op.author]={...op.data,id:op.author};
+  if(op.kind==='country-state')countryStates.set(op.data.code,op.data.visited);
   if(op.kind==='setting')settings[op.data.key]=op.data.value;
   if(op.kind==='countdown')countdowns.set(op.activity,{id:op.activity,...op.data,author:op.author});
   if(op.kind==='letter')letters.set(op.activity,{id:op.activity,...op.data,author:op.author,name:op.name,time:op.time});
@@ -63,7 +66,7 @@ function project(ops){
  }
  for(const name of hiddenCategories){categories.delete(name);customCategories.delete(name);}
  for(const a of memories.values()){if(a.section==='experiences'&&hiddenCategories.has(a.category)){a.category='Altro';categories.add('Altro');}a.removedMedia=a.media.filter(m=>mediaStates.get(JSON.stringify([a.id,m.id]))===true);a.media=a.media.filter(m=>mediaStates.get(JSON.stringify([a.id,m.id]))!==true);}
- return {customCategories:[...customCategories.values()],countdowns:[...countdowns.values()].sort((a,b)=>a.date.localeCompare(b.date)||a.title.localeCompare(b.title)),memories:[...memories.values()].sort((a,b)=>(b.date||'').localeCompare(a.date||'')||a.title.localeCompare(b.title)),categories:[...categories],profiles,settings,identities,letters:[...letters.values()].sort((a,b)=>b.time-a.time),games:[...games.values()].sort((a,b)=>b.time-a.time),results};
+ return {countries:[...countryStates].filter(([,visited])=>visited).map(([code])=>code).sort(),customCategories:[...customCategories.values()],countdowns:[...countdowns.values()].sort((a,b)=>a.date.localeCompare(b.date)||a.title.localeCompare(b.title)),memories:[...memories.values()].sort((a,b)=>(b.date||'').localeCompare(a.date||'')||a.title.localeCompare(b.title)),categories:[...categories],profiles,settings,identities,letters:[...letters.values()].sort((a,b)=>b.time-a.time),games:[...games.values()].sort((a,b)=>b.time-a.time),results};
 }
 function validDate(v){if(v==='')return true;if(typeof v!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(v))return false;const d=new Date(v+'T12:00:00Z');return !Number.isNaN(d.valueOf())&&d.toISOString().slice(0,10)===v;}
 function text(v,max){return typeof v==='string'&&v.length<=max;}
@@ -76,6 +79,7 @@ function validateOp(o){
  if(o.kind==='media')ok=text(d.url,40*1024*1024)&&/^data:(image\/(jpeg|png|webp)|video\/(mp4|quicktime|webm));base64,[A-Za-z0-9+/=]+$/.test(d.url)&&text(d.type,80)&&text(d.name,300);
  if(o.kind==='media-state')ok=text(d.mediaId,120)&&!!d.mediaId&&typeof d.removed==='boolean';
  if(o.kind==='delete-memory')ok=!!o.activity&&Object.keys(d).length===0;
+ if(o.kind==='country-state')ok=countryCodes.includes(d.code)&&typeof d.visited==='boolean'&&o.activity==='visited-'+d.code&&Object.keys(d).length===2;
  if(o.kind==='countdown')ok=!!o.activity&&text(d.title,120)&&!!d.title.trim()&&validDate(d.date)&&!!d.date&&image(d.photo);
  if(o.kind==='delete-countdown')ok=!!o.activity&&Object.keys(d).length===0;
  if(['delete-game','delete-letter','clear-rating','clear-game-results'].includes(o.kind))ok=!!o.activity&&Object.keys(d).length===0;
@@ -107,6 +111,6 @@ function profileChanges(profiles,owner,baseline,draft,allowPartnerPhoto=false){
  }
  return changes;
 }
-root.DiaryModel={project,activities,validateOp,sections,defaults,sectionOf,validDate,people,resolveAuthor,profileChanges,compactOps};
+root.DiaryModel={countryCodes,project,activities,validateOp,sections,defaults,sectionOf,validDate,people,resolveAuthor,profileChanges,compactOps};
 if(typeof module!=='undefined')module.exports=root.DiaryModel;
 })(globalThis);
