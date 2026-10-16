@@ -1,6 +1,6 @@
 'use strict';
 window.diaryBoot=window.diaryBoot||{phase:'Caricamento del diario',ready:false};
-const VERSION=27;
+const VERSION=28;
 const WIRE_VERSION=27;
 const uuid=()=>crypto.randomUUID?crypto.randomUUID():([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g,c=>(c^crypto.getRandomValues(new Uint8Array(1))[0]&15>>c/4).toString(16));
 const $=id=>document.getElementById(id);
@@ -30,10 +30,10 @@ const paths={
 const icon=(name,cls='')=>'<svg class="'+cls+'" viewBox="0 0 24 24" aria-hidden="true"><path d="'+(paths[name]||paths.heart)+'"/></svg>';
 const sectionInfo={
  experiences:{title:'Esperienze',subtitle:'Le cose che facciamo insieme.',icon:'film'},
- dance:{title:'Danza',subtitle:'Il tuo posto in prima fila.',icon:'dance'},
  trips:{title:'Vacanze e weekend',subtitle:'Casa, ovunque siamo insieme.',icon:'trips'},
+ holidays:{title:'Festività',subtitle:'I nostri giorni un po’ speciali.',icon:'sparkle'},
  gifts:{title:'Regali',subtitle:'Ogni pensiero, una piccola storia.',icon:'gifts'},
- holidays:{title:'Festività',subtitle:'I nostri giorni un po’ speciali.',icon:'sparkle'}
+ dance:{title:'Danza',subtitle:'Il tuo posto in prima fila.',icon:'dance'}
 };
 const gameTypes={
  quiz:{title:'Quanto mi conosci?',subtitle:'Quattro risposte. Una è quella giusta.',icon:'heart'},
@@ -63,12 +63,12 @@ let removalAction=null;
 function confirmRemoval(title,description,perform){removalAction=perform;$('manageDeleteTitle').textContent=title;$('manageDeleteDescription').textContent=description;$('manageDeleteDialog').showModal();}
 $('manageDeleteConfirm').onclick=async e=>withSave(e.currentTarget,async()=>{const perform=removalAction;if(!perform)return;const message=await perform();$('manageDeleteDialog').close();toast(message||'Eliminato. La modifica sarà condivisa al prossimo collegamento.');});
 $('manageDeleteDialog').addEventListener('close',()=>{removalAction=null;});
-const profileSections={profile:['user','Il mio profilo','Foto e dati personali'],connect:['link','Collega i diari','Collegamento diretto con QR'],theme:['sparkle','Aspetto','Chiaro, scuro o automatico'],updates:['clock','Aggiornamenti','Versione '+VERSION],installation:['home','Installazione','La guida per il tuo iPhone'],backup:['album','Backup e ripristino','Una copia dei vostri ricordi'],date:['calendar','La nostra data','Il giorno in cui è iniziato tutto'],screen:['check','Schermo e assistenza','Layout e diagnostica locale'],admin:['lock','Amministrazione','Gestione dei due profili']};
+const profileSections={profile:['user','Il mio profilo','Foto e dati personali'],cover:['camera','Foto della Home','L’immagine della vostra storia'],connect:['link','Collega i diari','Collegamento diretto con QR'],theme:['sparkle','Aspetto','Chiaro, scuro o automatico'],updates:['clock','Aggiornamenti','Versione '+VERSION],installation:['home','Installazione','La guida per il tuo iPhone'],backup:['album','Backup e ripristino','Una copia dei vostri ricordi'],date:['calendar','La nostra data','Il giorno in cui è iniziato tutto'],screen:['check','Schermo e assistenza','Layout e diagnostica locale'],admin:['lock','Amministrazione','Gestione dei due profili']};
 function updateProfileMenu(){
  if(!state)return;
  $('profileSummary').innerHTML='<span class="avatar">'+avatar(state.profiles[author])+'</span><h3>'+esc(personName())+'</h3>';
  if(!$('profileMenu').children.length)$('profileMenu').innerHTML=Object.entries(profileSections).map(([key,[ic,title,detail]])=>'<button class="settings-row" data-profile-section="'+key+'" '+(key==='admin'?'id="profileAdminRow"':'')+'><span class="settings-row-icon">'+icon(ic)+'</span><span><strong>'+title+'</strong><small>'+detail+'</small></span>'+icon('right','settings-chevron')+'</button>').join('');
- $('profileAdminRow').hidden=author!=='one';$('appVersion').textContent=String(VERSION);
+ updateCoverSettings();$('profileAdminRow').hidden=author!=='one';$('appVersion').textContent=String(VERSION);
 }
 function showProfileSection(section){
  if(section!=='home'&&!Object.hasOwn(profileSections,section)||section==='admin'&&author!=='one')return;
@@ -144,7 +144,7 @@ function render(){
 }
 function renderHome(){
  const date=state.settings.anniversaryStart?.date||state.settings.anniversary||'',mediaCount=state.memories.reduce((n,a)=>n+a.media.length,0);
- return '<div class="home-topline"><span>'+esc(new Date().toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long'}))+'</span><span>'+icon('lock')+'Il nostro spazio</span></div><div class="home-layout"><div><section class="hero">'+(state.settings.cover?'<img class="hero-image" src="'+esc(state.settings.cover)+'" alt="La nostra foto">':'<div class="hero-orbit"></div><div class="hero-orbit second"></div><div class="hero-heart">'+icon('heart')+'</div>')+(state.settings.cover?'<button class="cover-remove" data-action="remove-cover" aria-label="Rimuovi foto della Home">×</button>':'')+'<button class="photo-edit" data-action="cover">'+icon('camera')+(state.settings.cover?'Cambia foto':'La nostra foto')+'</button><div class="hero-content"><div><span class="hero-kicker">LA NOSTRA STORIA</span><h1>Tu, io.<br><em>Tutto il resto.</em></h1></div><div class="together"><div class="together-title">Insieme da</div><div class="counter" aria-label="Tempo trascorso insieme"><div><strong id="days">—</strong><span>giorni</span></div><div><strong id="hours">—</strong><span>ore</span></div><div><strong id="minutes">—</strong><span>minuti</span></div><div><strong id="seconds">—</strong><span>secondi</span></div></div><p class="together-since">'+(date?'Dal '+esc(formatDate(date))+(state.settings.anniversaryStart?' · ore '+esc(state.settings.anniversaryStart.time):''):'Scegli la vostra data nel profilo')+'</p></div></div></section><div class="stat-strip"><div><strong>'+state.memories.length+'</strong><span>ricordi</span></div><div><strong>'+mediaCount+'</strong><span>foto e video</span></div><div><strong>'+state.letters.length+'</strong><span>lettere</span></div></div></div><div class="home-side"><div class="section-heading"><h2>I nostri traguardi.</h2><button class="text-button" data-view="ricordi">Esplora '+icon('right')+'</button></div><div class="collection-grid">'+Object.keys(sectionInfo).map(key=>collectionTile(key)).join('')+'<button class="collection-card tone-letters" data-view="lettere"><span class="tile-icon">'+icon('letter')+'</span><strong>Ti lascio un pensiero.</strong><small>Una lettera per te.</small>'+icon('right','chevron')+'</button></div></div></div>';
+ return '<div class="home-topline"><span>'+esc(new Date().toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long'}))+'</span><span>'+icon('lock')+'Il nostro spazio</span></div><div class="home-layout"><div><section class="hero">'+(state.settings.cover?'<img class="hero-image" src="'+esc(state.settings.cover)+'" alt="La nostra foto">':'<div class="hero-orbit"></div><div class="hero-orbit second"></div><div class="hero-heart">'+icon('heart')+'</div>')+'<div class="hero-content"><div><span class="hero-kicker">LA NOSTRA STORIA</span><h1>Tu, io.<br><em>Tutto il resto.</em></h1></div><div class="together"><div class="together-title">Insieme da</div><div class="counter" aria-label="Tempo trascorso insieme"><div><strong id="days">—</strong><span>giorni</span></div><div><strong id="hours">—</strong><span>ore</span></div><div><strong id="minutes">—</strong><span>minuti</span></div><div><strong id="seconds">—</strong><span>secondi</span></div></div><p class="together-since">'+(date?'Dal '+esc(formatDate(date))+(state.settings.anniversaryStart?' · ore '+esc(state.settings.anniversaryStart.time):''):'Scegli la vostra data nel profilo')+'</p></div></div></section><div class="stat-strip"><div><strong>'+state.memories.length+'</strong><span>ricordi</span></div><div><strong>'+mediaCount+'</strong><span>foto e video</span></div><div><strong>'+state.letters.length+'</strong><span>lettere</span></div></div></div><div class="home-side"><div class="section-heading"><h2>I nostri traguardi.</h2><button class="text-button" data-view="ricordi">Esplora '+icon('right')+'</button></div><div class="collection-grid">'+Object.keys(sectionInfo).map(key=>collectionTile(key)).join('')+'<button class="collection-card tone-letters" data-view="lettere"><span class="tile-icon">'+icon('letter')+'</span><strong>Ti lascio un pensiero.</strong><small>Una lettera per te.</small>'+icon('right','chevron')+'</button></div></div></div>';
 }
 function tickCounter(){
  tickCountdowns();
@@ -244,12 +244,12 @@ window.addEventListener('hashchange',()=>{const next=location.hash.slice(1);if((
 let navPointer=null,blockNavClickUntil=0;
 function renderNavigation(){
  const nav=$('bottomNav');
- if(!nav.querySelector('.nav-bubble'))nav.innerHTML='<span class="nav-bubble" aria-hidden="true"></span>'+[['home','home','Home'],['ricordi','album','Ricordi'],['calendario','calendar','Calendario'],['countdown','clock','Countdown'],['giochi','games','Giochi']].map(([id,ic,label])=>'<a href="#'+id+'" data-page="'+id+'">'+icon(ic)+'<span>'+label+'</span></a>').join('');
- for(const link of nav.querySelectorAll('a')){const selected=link.dataset.page===(view==='lettere'?'ricordi':view);link.classList.toggle('active',selected);if(selected)link.setAttribute('aria-current','page');else link.removeAttribute('aria-current');}
+ if(!nav.querySelector('.nav-bubble'))nav.innerHTML='<span class="nav-bubble" aria-hidden="true"></span>'+[['home','home','Home'],['ricordi','album','Ricordi'],['calendario','calendar','Calendario'],['countdown','clock','Countdown'],['giochi','games','Giochi']].map(([id,ic,label])=>'<button type="button" data-page="'+id+'">'+icon(ic)+'<span>'+label+'</span></button>').join('');
+ for(const link of nav.querySelectorAll('button[data-page]')){const selected=link.dataset.page===(view==='lettere'?'ricordi':view);link.classList.toggle('active',selected);if(selected)link.setAttribute('aria-current','page');else link.removeAttribute('aria-current');}
  if(!navPointer)positionNavigationBubble();
 }
 function positionNavigationBubble(clientX=null){
- const nav=$('bottomNav'),links=[...nav.querySelectorAll('a')];if(!links.length)return;
+ const nav=$('bottomNav'),links=[...nav.querySelectorAll('button[data-page]')];if(!links.length)return;
  const box=nav.getBoundingClientRect(),first=links[0].getBoundingClientRect(),last=links.at(-1).getBoundingClientRect();
  const index=clientX===null?Math.max(0,DiaryInteraction.pages.indexOf(view==='lettere'?'ricordi':view)):DiaryInteraction.navIndex(clientX,first.left,last.right,links.length),target=links[index].getBoundingClientRect();
  const left=clientX===null?target.left:Math.max(first.left,Math.min(last.left,clientX-first.width/2));
@@ -272,7 +272,7 @@ function finishNavigationPointer(e,cancel=false){
 $('bottomNav').addEventListener('pointerup',e=>finishNavigationPointer(e));
 $('bottomNav').addEventListener('pointercancel',e=>finishNavigationPointer(e,true));
 $('bottomNav').addEventListener('lostpointercapture',e=>{if(navPointer?.id===e.pointerId)finishNavigationPointer(e,true);});
-$('bottomNav').addEventListener('click',e=>{const link=e.target.closest('a[data-page]');if(!link)return;e.preventDefault();if(performance.now()>=blockNavClickUntil)navigate(link.dataset.page);});
+$('bottomNav').addEventListener('click',e=>{const link=e.target.closest('button[data-page]');if(!link)return;e.preventDefault();if(performance.now()>=blockNavClickUntil)navigate(link.dataset.page);});
 if('ResizeObserver'in window)new ResizeObserver(()=>{if(!navPointer)positionNavigationBubble();}).observe($('bottomNav'));
 $('view').addEventListener('click',e=>{
  const b=e.target.closest('button');if(!b)return;
@@ -305,7 +305,7 @@ function openNew(){
 }
 function updateNewFields(){
  const s=$('sectionInput').value,undated=$('undatedInput').checked;
- $('categoryLabel').hidden=s!=='experiences';$('recipientLabel').hidden=s!=='gifts';$('endDateLabel').hidden=s!=='trips';
+ $('categoryLabel').hidden=s!=='experiences';$('recipientLabel').hidden=s!=='gifts';$('endDateLabel').hidden=undated||s!=='trips';$('memoryDateRow').hidden=undated;
  $('dateInput').disabled=undated;$('dateInput').required=!undated;$('endDateInput').disabled=undated;
  $('dateHelp').textContent=undated?'Ce lo ricordiamo anche senza una data. Resterà nella sua raccolta, fuori dal calendario.':'Con una data, questo ricordo apparirà anche nel calendario.';
  $('newTitle').textContent={experiences:'Una nuova esperienza',dance:'Un posto in prima fila',trips:'Un’altra piccola fuga',gifts:'Un pensiero da custodire',holidays:'Un giorno speciale'}[s];
@@ -546,7 +546,7 @@ function personName(person=author){const p=state?.profiles?.[person]||people[per
 function requestedPerson(){const p=new URL(location.href).searchParams.get('profilo');return Object.hasOwn(people,p)?p:null;}
 function setInstallManifest(){
  if(!Object.hasOwn(people,author))return;
- const href='manifest-'+author+'.json';document.querySelector('link[rel="manifest"]').href=href;
+ const href=new URL(location.href).searchParams.get('icona')==='nuova'?'manifest-icon.json':'manifest-'+author+'.json';document.querySelector('link[rel="manifest"]').href=href;
  const url=new URL(location.href);url.searchParams.set('profilo',author);url.searchParams.delete('struttura');url.searchParams.delete('prova');history.replaceState(null,'',url);
 }
 async function choosePerson(person){
@@ -719,3 +719,11 @@ $('view').addEventListener('touchend',e=>{
 for(const event of ['gesturestart','gesturechange'])document.addEventListener(event,e=>e.preventDefault(),{passive:false});
 document.addEventListener('touchmove',e=>{if(e.touches.length>1&&e.cancelable)e.preventDefault();},{passive:false});
 init().catch(e=>{const node=$('bootStatus');node.hidden=false;node.textContent='Archivio non disponibile: '+e.message;toast('Archivio non disponibile: '+e.message);});
+
+function updateCoverSettings(){
+ $('homeCoverPreview').innerHTML=state.settings.cover?'<img src="'+esc(state.settings.cover)+'" alt="Foto della Home">':'<p class="muted">Scegli una foto per la vostra Home.</p>';
+ $('removeHomeCover').hidden=!state.settings.cover;
+}
+$('changeHomeCover').onclick=()=>$('coverInput').click();
+$('removeHomeCover').onclick=()=>confirmRemoval('Rimuovere la foto della Home?','Potrai sceglierne un’altra in qualsiasi momento.',async()=>{await addOp('setting','our-story',{key:'cover',value:''});updateCoverSettings();return 'Foto della Home rimossa';});
+$('bottomNav').addEventListener('contextmenu',e=>e.preventDefault());

@@ -1,6 +1,6 @@
 (function(root){
 'use strict';
-const sections={experiences:'Esperienze',dance:'Danza',trips:'Vacanze e weekend',gifts:'Regali',holidays:'Festività'};
+const sections={experiences:'Esperienze',trips:'Vacanze e weekend',holidays:'Festività',gifts:'Regali',dance:'Danza'};
 const people={one:{id:'one',firstName:'Persona 1',lastName:'',photo:''},two:{id:'two',firstName:'Persona 2',lastName:'',photo:''}};
 const defaults=['Cinema','Film a casa','Ristoranti','Concerti','Teatro'];
 function ordered(ops){return [...ops].sort((a,b)=>a.time-b.time||a.id.localeCompare(b.id));}

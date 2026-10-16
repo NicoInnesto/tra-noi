@@ -1,7 +1,7 @@
 'use strict';
-// Release 27: profile sections and shared content management.
-const VERSION=27,BASE=new URL('./',self.location.href),CACHE='tra-noi-pages-'+BASE.pathname+'-v27';
-const relative=['index.html?v=27','style.css?v=27','boot.js?v=27','model.js?v=27','offline.js?v=27','link.js?v=27','interaction.js?v=27','access.js?v=27','preferences.js?v=27','viewport.js?v=27','app.js?v=27','manifest.json','manifest-one.json','manifest-two.json','icon.svg?v=27','icon-192.png?v=27','icon-512.png?v=27','apple-touch-icon.png?v=27','vendor/qrcode.js','vendor/jsqr.js','installazione.html'];
+// Release 28: iPhone controls and safe icon installation.
+const VERSION=28,BASE=new URL('./',self.location.href),CACHE='tra-noi-pages-'+BASE.pathname+'-v28';
+const relative=['index.html?v=28','style.css?v=28','boot.js?v=28','model.js?v=28','offline.js?v=28','link.js?v=28','interaction.js?v=28','access.js?v=28','preferences.js?v=28','viewport.js?v=28','app.js?v=28','manifest.json','manifest-one.json','manifest-two.json','icon.svg?v=28','icon-192.png?v=28','icon-512.png?v=28','apple-touch-icon.png?v=28','vendor/qrcode.js','vendor/jsqr.js','installazione.html','nuova-icona.html','manifest-icon.json'];
 const ASSETS=relative.map(p=>new URL(p,BASE).href),SHELL=ASSETS[0];
 self.addEventListener('install',e=>e.waitUntil((async()=>{const cache=await caches.open(CACHE);await cache.addAll(ASSETS);await self.skipWaiting();})()));
 self.addEventListener('activate',e=>e.waitUntil((async()=>{for(const key of await caches.keys())if(key!==CACHE&&key.startsWith('tra-noi-pages-'+BASE.pathname+'-v'))await caches.delete(key);await self.clients.claim();})()));
