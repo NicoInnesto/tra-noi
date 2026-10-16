@@ -1,7 +1,7 @@
 'use strict';
 // Release 1.0 (build 32): compact version label, thought count and distinct game icons.
-const VERSION=32,BASE=new URL('./',self.location.href),CACHE='tra-noi-pages-'+BASE.pathname+'-v32';
-const relative=['index.html?v=32','style.css?v=32','boot.js?v=32','model.js?v=32','offline.js?v=32','link.js?v=32','interaction.js?v=32','access.js?v=32','preferences.js?v=32','viewport.js?v=32','app.js?v=32','backup.js?v=32','manifest.json','manifest-one.json','manifest-two.json','icon.svg?v=32','icon-192.png?v=32','icon-512.png?v=32','apple-touch-icon.png?v=32','vendor/qrcode.js','vendor/jsqr.js','installazione.html','nuova-icona.html','manifest-icon.json'];
+const VERSION=33,BASE=new URL('./',self.location.href),CACHE='tra-noi-pages-'+BASE.pathname+'-v33';
+const relative=['index.html?v=33','style.css?v=33','boot.js?v=33','model.js?v=33','offline.js?v=33','link.js?v=33','interaction.js?v=33','access.js?v=33','preferences.js?v=33','viewport.js?v=33','app.js?v=33','backup.js?v=33','manifest.json','manifest-one.json','manifest-two.json','icon.svg?v=33','icon-192.png?v=33','icon-512.png?v=33','apple-touch-icon.png?v=33','vendor/qrcode.js','vendor/jsqr.js','installazione.html','nuova-icona.html','manifest-icon.json'];
 const ASSETS=relative.map(p=>new URL(p,BASE).href),SHELL=ASSETS[0];
 self.addEventListener('install',e=>e.waitUntil((async()=>{const cache=await caches.open(CACHE);await cache.addAll(ASSETS);await self.skipWaiting();})()));
 self.addEventListener('activate',e=>e.waitUntil((async()=>{for(const key of await caches.keys())if(key!==CACHE&&key.startsWith('tra-noi-pages-'+BASE.pathname+'-v'))await caches.delete(key);await self.clients.claim();})()));

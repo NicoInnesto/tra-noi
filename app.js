@@ -1,6 +1,6 @@
 'use strict';
 window.diaryBoot=window.diaryBoot||{phase:'Caricamento del diario',ready:false};
-const VERSION=32;
+const VERSION=33;
 const RELEASE='1.0';
 const WIRE_VERSION=31;
 const uuid=()=>crypto.randomUUID?crypto.randomUUID():([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g,c=>(c^crypto.getRandomValues(new Uint8Array(1))[0]&15>>c/4).toString(16));
@@ -68,7 +68,7 @@ let removalAction=null;
 function confirmRemoval(title,description,perform){removalAction=perform;$('manageDeleteTitle').textContent=title;$('manageDeleteDescription').textContent=description;$('manageDeleteDialog').showModal();}
 $('manageDeleteConfirm').onclick=async e=>withSave(e.currentTarget,async()=>{const perform=removalAction;if(!perform)return;const message=await perform();$('manageDeleteDialog').close();toast(message||'Eliminato. La modifica sarà condivisa al prossimo collegamento.');});
 $('manageDeleteDialog').addEventListener('close',()=>{removalAction=null;});
-const profileSections={profile:['user','Il mio profilo','Foto e dati personali'],cover:['camera','Foto della Home','L’immagine della vostra storia'],connect:['link','Collega i diari','Collegamento diretto con QR'],theme:['sparkle','Aspetto','Chiaro, scuro o automatico'],updates:['clock','Aggiornamenti','Versione '+RELEASE],installation:['home','Installazione','La guida per il tuo iPhone'],backup:['album','Backup e ripristino','Una copia dei vostri ricordi'],date:['calendar','La nostra data','Il giorno in cui è iniziato tutto'],screen:['check','Schermo e assistenza','Layout e diagnostica locale'],admin:['lock','Amministrazione','Gestione dei due profili']};
+const profileSections={profile:['user','Il mio profilo','Foto e dati personali'],connect:['link','Collega i diari','Collegamento diretto con QR'],cover:['camera','Foto della home','L’immagine della vostra storia'],theme:['sparkle','Aspetto','Chiaro, scuro o automatico'],date:['calendar','La nostra data','Il giorno in cui è iniziato tutto'],updates:['clock','Aggiornamenti','Versione '+RELEASE],installation:['home','Installazione','La guida per il tuo iPhone'],backup:['album','Backup e ripristino','Una copia dei vostri ricordi'],screen:['check','Schermo e assistenza','Layout e diagnostica locale'],admin:['lock','Amministrazione','Gestione dei due profili']};
 function updateProfileMenu(){
  if(!state)return;
  $('profileSummary').innerHTML='<span class="avatar">'+avatar(state.profiles[author])+'</span><h3>'+esc(personName())+'</h3>';
@@ -743,11 +743,11 @@ document.addEventListener('touchmove',e=>{if(e.touches.length>1&&e.cancelable)e.
 init().catch(e=>{const node=$('bootStatus');node.hidden=false;node.textContent='Archivio non disponibile: '+e.message;toast('Archivio non disponibile: '+e.message);});
 
 function updateCoverSettings(){
- $('homeCoverPreview').innerHTML=state.settings.cover?'<img src="'+esc(state.settings.cover)+'" alt="Foto della Home">':'<p class="muted">Scegli una foto per la vostra Home.</p>';
+ $('homeCoverPreview').innerHTML=state.settings.cover?'<img src="'+esc(state.settings.cover)+'" alt="Foto della home">':'<p class="muted">Scegli una foto per la vostra Home.</p>';
  $('removeHomeCover').hidden=!state.settings.cover;
 }
 $('changeHomeCover').onclick=()=>$('coverInput').click();
-$('removeHomeCover').onclick=()=>confirmRemoval('Rimuovere la foto della Home?','Potrai sceglierne un’altra in qualsiasi momento.',async()=>{await addOp('setting','our-story',{key:'cover',value:''});updateCoverSettings();return 'Foto della Home rimossa';});
+$('removeHomeCover').onclick=()=>confirmRemoval('Rimuovere la foto della Home?','Potrai sceglierne un’altra in qualsiasi momento.',async()=>{await addOp('setting','our-story',{key:'cover',value:''});updateCoverSettings();return 'Foto della home rimossa';});
 $('bottomNav').addEventListener('contextmenu',e=>e.preventDefault());
 
 const countryNames=new Intl.DisplayNames(['it'],{type:'region'});
