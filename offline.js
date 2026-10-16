@@ -1,13 +1,13 @@
 (function(root){
 'use strict';
-const VERSION=22;let current={phase:'waiting',ready:false,version:VERSION,message:'Preparazione della copia offline…'},running=null,registration;
+const VERSION=26;let current={phase:'waiting',ready:false,version:VERSION,message:'Preparazione della copia offline…'},running=null,registration;
 function emit(next){current={...current,...next};root.dispatchEvent(new CustomEvent('diary-offline',{detail:current}));return current;}
 function limit(promise,ms,message){return new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error(message)),ms);promise.then(value=>{clearTimeout(timer);resolve(value);},error=>{clearTimeout(timer);reject(error);});});}
 function isInstalled(){return navigator.standalone===true||root.matchMedia('(display-mode: standalone)').matches;}
-async function workerStatus(){
- const worker=navigator.serviceWorker.controller;if(!worker)throw Error('La copia non controlla ancora questa apertura. Premi Riprova.');
+async function workerStatus(allowNewer=false,worker=navigator.serviceWorker.controller){
+ if(!worker)throw Error('La copia non controlla ancora questa apertura. Premi Riprova.');
  const result=await limit(new Promise((resolve,reject)=>{const pipe=new MessageChannel();pipe.port1.onmessage=e=>{pipe.port1.close();resolve(e.data);};pipe.port1.onmessageerror=()=>reject(Error('Verifica offline non riuscita'));worker.postMessage({type:'OFFLINE_STATUS'},[pipe.port2]);}),3000,'La copia offline deve essere aggiornata. Ricarica con Internet disponibile.');
- if(result.version!==VERSION)throw Error('È pronta una nuova versione. Ricarica il diario con Internet disponibile.');
+ if(result.version!==VERSION&&!(allowNewer&&result.version>VERSION))throw Error('È pronta una nuova versione. Ricarica il diario con Internet disponibile.');
  if(!result.ready)throw Error('Mancano alcuni file per l’apertura offline. Riprova con Internet disponibile.');
  return result;
 }
@@ -37,5 +37,20 @@ async function prepare(){
  }
  return current;
 }
-root.DiaryOffline={start(){if(!running)running=prepare().finally(()=>running=null);return running;},check:workerStatus,isInstalled,get status(){return {...current};}};
+async function update(){
+ if(!root.isSecureContext||!('serviceWorker'in navigator))throw Error('Apri il diario dal suo indirizzo HTTPS');
+ if(navigator.onLine===false)throw Error('Collegati a Internet per cercare un aggiornamento. Il diario resta disponibile offline.');
+ const reg=await limit(navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}),15000,'Controllo non riuscito. I tuoi dati sono ancora qui.');
+ await limit(reg.update(),15000,'Il controllo sta impiegando troppo. Riprova con Internet disponibile.');
+ const worker=reg.installing||reg.waiting;
+ if(worker&&worker.state!=='activated')await limit(new Promise((resolve,reject)=>{
+  const changed=()=>{if(worker.state==='activated'){worker.removeEventListener('statechange',changed);resolve();}else if(worker.state==='redundant'){worker.removeEventListener('statechange',changed);reject(Error('Aggiornamento incompleto. La copia precedente resta disponibile.'));}};
+  worker.addEventListener('statechange',changed);changed();
+ }),25000,'Aggiornamento ancora in corso. Riapri il diario tra poco.');
+ // clients.claim may finish just after activation; inspect the controlling copy.
+ const latest=await workerStatus(true,reg.active);
+ for(let i=0;i<10;i++){try{const controlled=await workerStatus(true);if(controlled.version===latest.version)return latest;}catch{}await new Promise(resolve=>setTimeout(resolve,150));}
+ throw Error('Aggiornamento pronto. Chiudi e riapri il diario per caricarlo.');
+}
+root.DiaryOffline={start(){if(!running)running=prepare().finally(()=>running=null);return running;},check:workerStatus,update,isInstalled,get status(){return {...current};}};
 })(window);

@@ -1,8 +1,13 @@
 (function(root){
 'use strict';
-const pages=['home','ricordi','calendario','lettere','giochi'];
+const pages=['home','ricordi','calendario','countdown','giochi'];
+function countdownDays(date,now=Date.now()){
+ const parts=Object.fromEntries(new Intl.DateTimeFormat('en-GB',{timeZone:'Europe/Rome',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date(now)).map(p=>[p.type,p.value]));
+ const [y,m,d]=date.split('-').map(Number);
+ return Math.round((Date.UTC(y,m-1,d)-Date.UTC(Number(parts.year),Number(parts.month)-1,Number(parts.day)))/86400000);
+}
 function swipePage(current,start,end){
- const dx=end.x-start.x,dy=end.y-start.y,index=pages.indexOf(current);
+ const dx=end.x-start.x,dy=end.y-start.y,index=pages.indexOf(current==='lettere'?'ricordi':current);
  if(index<0||end.time-start.time>750||Math.abs(dx)<75||Math.abs(dx)<Math.abs(dy)*1.8)return null;
  return pages[index+(dx<0?1:-1)]||null;
 }
@@ -23,6 +28,6 @@ function counterParts(settings,now=Date.now()){
  return {days:Math.floor(elapsed/86400),hours:Math.floor(elapsed/3600)%24,minutes:Math.floor(elapsed/60)%60,seconds:elapsed%60};
 }
 function navIndex(x,left,right,count){return Math.max(0,Math.min(count-1,Math.floor((x-left)/Math.max(1,right-left)*count)));}
-root.DiaryInteraction={pages,swipePage,startInstant,counterParts,navIndex};
+root.DiaryInteraction={pages,swipePage,startInstant,counterParts,navIndex,countdownDays};
 if(typeof module!=='undefined')module.exports=root.DiaryInteraction;
 })(globalThis);

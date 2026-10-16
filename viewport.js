@@ -6,7 +6,7 @@ function configure(){
  const installed=root.navigator.standalone===true||root.matchMedia('(display-mode: standalone)').matches;
  doc.documentElement.classList.toggle('ios-home-screen',ios&&installed);
 }
-root.DiaryViewport={get status(){return doc.documentElement.classList.contains('ios-home-screen')?'layout a tutta altezza · senza focus automatico':'layout browser';}};
+root.DiaryViewport={refresh:configure,get status(){return doc.documentElement.classList.contains('ios-home-screen')?'layout a tutta altezza · senza focus automatico':'layout browser';}};
 root.addEventListener('pageshow',configure);
 doc.addEventListener('visibilitychange',()=>{if(!doc.hidden)configure();});
 configure();

@@ -1,7 +1,7 @@
 'use strict';
 window.diaryBoot=window.diaryBoot||{phase:'Caricamento del diario',ready:false};
-const VERSION=25;
-const WIRE_VERSION=22;
+const VERSION=26;
+const WIRE_VERSION=26;
 const uuid=()=>crypto.randomUUID?crypto.randomUUID():([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g,c=>(c^crypto.getRandomValues(new Uint8Array(1))[0]&15>>c/4).toString(16));
 const $=id=>document.getElementById(id);
 const storagePrefix='tra-noi:'+new URL('./',location.href).pathname+':';
@@ -84,7 +84,7 @@ async function init(){
  const request=requestedPerson();
  if(Object.hasOwn(people,savedPerson)){author=savedPerson;myName=personName();profileMismatch=!!request&&request!==author;setInstallManifest();}
  else if(request)await choosePerson(request);
- state=DiaryModel.project(ops);view=['home','ricordi','calendario','lettere','giochi'].includes(location.hash.slice(1))?location.hash.slice(1):'home';
+ state=DiaryModel.project(ops);view=['home','ricordi','calendario','lettere','countdown','giochi'].includes(location.hash.slice(1))?location.hash.slice(1):'home';
  window.diaryBoot.phase='Diario pronto';window.diaryBoot.ready=true;$('bootStatus').hidden=true;render();reportDiagnostic('page-ready',{version:VERSION});
  if(!window.isSecureContext)$('trialNote').hidden=false;
  DiaryOffline.start();updateInstallUI();
@@ -102,7 +102,7 @@ function render(){
  state=DiaryModel.project(ops);
  $('profileButton').innerHTML=avatar(state.profiles[author]);
  renderNavigation();
- $('view').innerHTML=({home:renderHome,ricordi:renderMemories,calendario:renderCalendar,lettere:renderLetters,giochi:renderGames}[view])();
+ $('view').innerHTML=({home:renderHome,ricordi:renderMemories,calendario:renderCalendar,lettere:renderLetters,countdown:renderCountdowns,giochi:renderGames}[view])();
  $('storage').textContent='Archivio locale: circa '+(ops.reduce((n,o)=>n+new Blob([JSON.stringify(o)]).size,0)/1024/1024).toFixed(1)+' MB. Gli originali in Foto occupano spazio separatamente.';
  tickCounter();
  if(active&&!state.memories.some(m=>m.id===active)){if($('photoViewer').open)$('photoViewer').close();if($('detailDialog').open)$('detailDialog').close();active=null;}
@@ -112,33 +112,73 @@ function render(){
 }
 function renderHome(){
  const date=state.settings.anniversaryStart?.date||state.settings.anniversary||'',mediaCount=state.memories.reduce((n,a)=>n+a.media.length,0);
- return '<div class="home-topline"><span>'+esc(new Date().toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long'}))+'</span><span>'+icon('lock')+'Il nostro spazio</span></div><div class="home-layout"><div><section class="hero">'+(state.settings.cover?'<img class="hero-image" src="'+esc(state.settings.cover)+'" alt="La nostra foto">':'<div class="hero-orbit"></div><div class="hero-orbit second"></div><div class="hero-heart">'+icon('heart')+'</div>')+'<button class="photo-edit" data-action="cover">'+icon('camera')+(state.settings.cover?'Cambia foto':'La nostra foto')+'</button><div class="hero-content"><div><span class="hero-kicker">LA NOSTRA STORIA</span><h1>Tu, io.<br><em>Tutto il resto.</em></h1></div><div class="together"><div class="together-title">Insieme da</div><div class="counter" aria-label="Tempo trascorso insieme"><div><strong id="days">—</strong><span>giorni</span></div><div><strong id="hours">—</strong><span>ore</span></div><div><strong id="minutes">—</strong><span>minuti</span></div><div><strong id="seconds">—</strong><span>secondi</span></div></div><p class="together-since">'+(date?'Dal '+esc(formatDate(date))+(state.settings.anniversaryStart?' · ore '+esc(state.settings.anniversaryStart.time):''):'Scegli la vostra data nel profilo')+'</p></div></div></section><div class="stat-strip"><div><strong>'+state.memories.length+'</strong><span>ricordi</span></div><div><strong>'+mediaCount+'</strong><span>foto e video</span></div><div><strong>'+state.letters.length+'</strong><span>lettere</span></div></div></div><div class="home-side"><div class="section-heading"><h2>Le nostre cose.</h2><button class="text-button" data-view="ricordi">Esplora '+icon('right')+'</button></div><div class="collection-grid">'+Object.keys(sectionInfo).map(key=>collectionTile(key)).join('')+'<button class="collection-card tone-letters" data-action="write-letter"><span class="tile-icon">'+icon('letter')+'</span><strong>Ti lascio un pensiero.</strong><small>Una lettera per te.</small>'+icon('right','chevron')+'</button></div></div></div>';
+ return '<div class="home-topline"><span>'+esc(new Date().toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long'}))+'</span><span>'+icon('lock')+'Il nostro spazio</span></div><div class="home-layout"><div><section class="hero">'+(state.settings.cover?'<img class="hero-image" src="'+esc(state.settings.cover)+'" alt="La nostra foto">':'<div class="hero-orbit"></div><div class="hero-orbit second"></div><div class="hero-heart">'+icon('heart')+'</div>')+'<button class="photo-edit" data-action="cover">'+icon('camera')+(state.settings.cover?'Cambia foto':'La nostra foto')+'</button><div class="hero-content"><div><span class="hero-kicker">LA NOSTRA STORIA</span><h1>Tu, io.<br><em>Tutto il resto.</em></h1></div><div class="together"><div class="together-title">Insieme da</div><div class="counter" aria-label="Tempo trascorso insieme"><div><strong id="days">—</strong><span>giorni</span></div><div><strong id="hours">—</strong><span>ore</span></div><div><strong id="minutes">—</strong><span>minuti</span></div><div><strong id="seconds">—</strong><span>secondi</span></div></div><p class="together-since">'+(date?'Dal '+esc(formatDate(date))+(state.settings.anniversaryStart?' · ore '+esc(state.settings.anniversaryStart.time):''):'Scegli la vostra data nel profilo')+'</p></div></div></section><div class="stat-strip"><div><strong>'+state.memories.length+'</strong><span>ricordi</span></div><div><strong>'+mediaCount+'</strong><span>foto e video</span></div><div><strong>'+state.letters.length+'</strong><span>lettere</span></div></div></div><div class="home-side"><div class="section-heading"><h2>I nostri traguardi.</h2><button class="text-button" data-view="ricordi">Esplora '+icon('right')+'</button></div><div class="collection-grid">'+Object.keys(sectionInfo).map(key=>collectionTile(key)).join('')+'<button class="collection-card tone-letters" data-view="lettere"><span class="tile-icon">'+icon('letter')+'</span><strong>Ti lascio un pensiero.</strong><small>Una lettera per te.</small>'+icon('right','chevron')+'</button></div></div></div>';
 }
 function tickCounter(){
+ tickCountdowns();
  if(!$('days'))return;
  const parts=DiaryInteraction.counterParts(state?.settings||{});
  for(const id of ['days','hours','minutes','seconds'])$(id).textContent=parts?(id==='days'?parts[id]:String(parts[id]).padStart(2,'0')):'—';
 }
 function renderMemories(){
- if(!collection)return '<div class="heading-row"><div class="page-heading"><p class="eyebrow">IL NOSTRO ALBUM</p><h1>Ricordi da <em>tenere.</em></h1><p>Ogni cosa bella trova il suo posto.</p></div><button class="primary" data-action="new">'+icon('plus')+'Aggiungi</button></div><div class="collection-grid all-collections">'+Object.keys(sectionInfo).map(key=>collectionTile(key)).join('')+'</div><div class="section-heading"><h2>Tutti i nostri ricordi</h2><p>'+state.memories.length+' in tutto</p></div><div class="memory-grid">'+(state.memories.length?state.memories.map(memoryCard).join(''):empty('Abbiamo un sacco di pagine davanti.','Puoi aggiungere anche ricordi passati. La data non è obbligatoria.','Aggiungi un ricordo','new','album'))+'</div>';
+ if(!collection)return '<div class="heading-row"><div class="page-heading"><p class="eyebrow">IL NOSTRO ALBUM</p><h1>Ricordi da <em>tenere.</em></h1><p>Ogni cosa bella trova il suo posto.</p></div><button class="primary" data-action="new">'+icon('plus')+'Aggiungi</button></div><div class="collection-grid all-collections">'+Object.keys(sectionInfo).map(key=>collectionTile(key)).join('')+'<button class="collection-card tone-letters" data-view="lettere"><span class="tile-icon">'+icon('letter')+'</span><strong>Lettere</strong><small>'+state.letters.length+' pensieri da rileggere</small>'+icon('right','chevron')+'</button>'+'</div><div class="section-heading"><h2>Tutti i nostri ricordi</h2><p>'+state.memories.length+' in tutto</p></div><div class="memory-grid">'+(state.memories.length?state.memories.map(memoryCard).join(''):empty('Abbiamo un sacco di pagine davanti.','Puoi aggiungere anche ricordi passati. La data non è obbligatoria.','Aggiungi un ricordo','new','album'))+'</div>';
  const s=sectionInfo[collection],list=state.memories.filter(a=>a.section===collection&&(selected==='Tutti'||collection!=='experiences'||a.category===selected));
  return '<button class="text-button back-link" data-action="all-collections">'+icon('left')+'Tutte le raccolte</button><div class="heading-row"><div class="page-heading"><p class="eyebrow">IL NOSTRO ALBUM</p><h1>'+s.title+'</h1><p>'+s.subtitle+'</p></div><button class="primary" data-action="new">'+icon('plus')+'Aggiungi</button></div><div class="collection-tabs">'+Object.keys(sectionInfo).map(key=>'<button data-collection="'+key+'" class="'+(key===collection?'active':'')+'">'+icon(sectionInfo[key].icon)+sectionInfo[key].title+'</button>').join('')+'</div>'+(collection==='experiences'?'<div class="chips">'+['Tutti',...state.categories].map(c=>'<button data-cat="'+esc(c)+'" class="'+(selected===c?'active':'')+'">'+esc(c)+'</button>').join('')+'<button class="add-chip" data-action="category">'+icon('plus')+'Categoria</button></div>':'')+(collection==='holidays'?'<p class="section-intro">Halloween, Natale, un anniversario. Una pagina per le foto e le parole di ogni festa vissuta insieme.</p>':'')+'<div class="memory-grid">'+(list.length?list.map(memoryCard).join(''):empty('Il prossimo capitolo è nostro.','Aggiungi un ricordo a questa raccolta. Foto e contributi potranno arrivare anche dopo.','Aggiungi un ricordo','new',s.icon))+'</div>';
 }
 function onDay(a,date){return !!a.date&&a.date<=date&&(a.endDate||a.date)>=date;}
 function renderCalendar(){
  const year=calendarMonth.getFullYear(),month=calendarMonth.getMonth(),first=new Date(year,month,1),offset=(first.getDay()+6)%7,today=localDay();
- const days=Array.from({length:42},(_,i)=>{const d=new Date(year,month,1-offset+i),key=localDay(d),items=state.memories.filter(a=>onDay(a,key)),photo=items.map(photoOf).find(Boolean);return '<button class="calendar-day'+(d.getMonth()!==month?' outside':'')+(items.length?' has-event':'')+(key===today?' today':'')+(key===calendarDay?' selected':'')+'" data-day="'+key+'" aria-label="'+esc(formatDate(key))+', '+items.length+' '+(items.length===1?'ricordo':'ricordi')+'" aria-pressed="'+(key===calendarDay)+'">'+(photo?'<img src="'+esc(photo.url)+'" alt="" loading="lazy">':'')+d.getDate()+'</button>';}).join('');
- const list=state.memories.filter(a=>onDay(a,calendarDay)),undated=state.memories.filter(a=>!a.date).length;
- return '<div class="heading-row"><div class="page-heading"><p class="eyebrow">GIORNO DOPO GIORNO</p><h1>Il nostro <em>tempo.</em></h1><p>Ci sono giorni che meritano un posto qui.</p></div><button class="primary" data-action="new">'+icon('plus')+'Ricordo</button></div><div class="calendar-layout"><div><section class="calendar"><div class="month-heading"><button class="icon-button" data-month="-1" aria-label="Mese precedente">'+icon('left')+'</button><h2>'+esc(first.toLocaleDateString('it-IT',{month:'long',year:'numeric'}))+'</h2><button class="icon-button" data-month="1" aria-label="Mese successivo">'+icon('right')+'</button></div><div class="weekdays">'+['L','M','M','G','V','S','D'].map(x=>'<span>'+x+'</span>').join('')+'</div><div class="calendar-grid">'+days+'</div><p class="calendar-legend"><i></i>Un puntino, un nostro ricordo.</p></section>'+(undated?'<p class="undated-note">'+undated+' ricordi senza data ti aspettano nelle loro raccolte.</p>':'')+'</div><section class="day-summary"><div class="section-heading"><h2>'+esc(formatDate(calendarDay,{day:'numeric',month:'long'}))+'</h2><button class="text-button" data-action="today">Oggi</button></div><div class="memory-grid">'+(list.length?list.map(memoryCard).join(''):empty('Una pagina ancora da scrivere.','Qui appariranno i ricordi di questa giornata.','Aggiungi un ricordo','new','calendar'))+'</div></section></div>';
+ const days=Array.from({length:42},(_,i)=>{const d=new Date(year,month,1-offset+i),key=localDay(d),items=[...state.memories.filter(a=>onDay(a,key)),...state.countdowns.filter(a=>a.date===key)],photo=items.map(a=>a.photo?{url:a.photo}:a.media?photoOf(a):null).find(Boolean);return '<button class="calendar-day'+(d.getMonth()!==month?' outside':'')+(items.length?' has-event':'')+(key===today?' today':'')+(key===calendarDay?' selected':'')+'" data-day="'+key+'" aria-label="'+esc(formatDate(key))+', '+items.length+' '+(items.length===1?'evento':'eventi')+'" aria-pressed="'+(key===calendarDay)+'">'+(photo?'<img src="'+esc(photo.url)+'" alt="" loading="lazy">':'')+d.getDate()+'</button>';}).join('');
+ const events=state.countdowns.filter(a=>a.date===calendarDay),list=state.memories.filter(a=>onDay(a,calendarDay)),undated=state.memories.filter(a=>!a.date).length;
+ return '<div class="heading-row"><div class="page-heading"><p class="eyebrow">GIORNO DOPO GIORNO</p><h1>Il nostro <em>tempo.</em></h1><p>Ci sono giorni che meritano un posto qui.</p></div><button class="primary" data-action="new">'+icon('plus')+'Ricordo</button></div><div class="calendar-layout"><div><section class="calendar"><div class="month-heading"><button class="icon-button" data-month="-1" aria-label="Mese precedente">'+icon('left')+'</button><h2>'+esc(first.toLocaleDateString('it-IT',{month:'long',year:'numeric'}))+'</h2><button class="icon-button" data-month="1" aria-label="Mese successivo">'+icon('right')+'</button></div><div class="weekdays">'+['L','M','M','G','V','S','D'].map(x=>'<span>'+x+'</span>').join('')+'</div><div class="calendar-grid">'+days+'</div><p class="calendar-legend"><i></i>Ricordi e countdown, nella loro giornata.</p></section>'+(undated?'<p class="undated-note">'+undated+' ricordi senza data ti aspettano nelle loro raccolte.</p>':'')+'</div><section class="day-summary"><div class="section-heading"><h2>'+esc(formatDate(calendarDay,{day:'numeric',month:'long'}))+'</h2><button class="text-button" data-action="today">Oggi</button></div><div class="memory-grid">'+(list.length||events.length?list.map(memoryCard).join('')+events.map(countdownCard).join(''):empty('Una pagina ancora da scrivere.','Qui appariranno i ricordi di questa giornata.','Aggiungi un ricordo','new','calendar'))+'</div></section></div>';
 }
+let countdownEdited=null,countdownPhotoDraft='',countdownPhotoPending=false,countdownPhotoSession=0,countdownArchiveOpen=false,countdownClockDay=null;
+function countdownCard(event){
+ const days=DiaryInteraction.countdownDays(event.date),label=days<0?'Un’attesa diventata storia':days===0?'Il nostro giorno è arrivato':days===1?'Manca solo un giorno':'Mancano '+days+' giorni';
+ return '<button class="countdown-card" data-countdown="'+esc(event.id)+'" aria-label="'+esc(event.title)+', '+esc(label)+', '+esc(formatDate(event.date))+'">'+(event.photo?'<img src="'+esc(event.photo)+'" alt="" loading="lazy">':'<span class="countdown-decoration">'+icon('sparkle')+'</span>')+'<span class="countdown-shade"></span><span class="countdown-content"><span class="eyebrow">'+(days<0?'UN GIORNO VISSUTO':'LA NOSTRA PROSSIMA EMOZIONE')+'</span><span class="countdown-number" data-countdown-days="'+esc(event.date)+'">'+(days<0?icon('heart'):days===0?'Oggi':days)+'</span><span class="countdown-unit">'+(days<0?'Da ricordare':days===0?'Ci siamo.':'giorni da aspettare')+'</span><strong>'+esc(event.title)+'</strong><span class="countdown-date">'+esc(formatDate(event.date))+'</span></span></button>';
+}
+function renderCountdowns(){
+ const upcoming=state.countdowns.filter(c=>DiaryInteraction.countdownDays(c.date)>=0),past=state.countdowns.filter(c=>DiaryInteraction.countdownDays(c.date)<0).toReversed();
+ return '<div class="heading-row"><div class="page-heading"><p class="eyebrow">NON VEDIAMO L’ORA</p><h1>Ci aspetta <em>qualcosa.</em></h1><p>Le cose belle iniziano anche nell’attesa.</p></div><button class="primary" data-action="new-countdown">'+icon('plus')+'Evento</button></div><div class="countdown-grid">'+(upcoming.length?upcoming.map(countdownCard).join(''):empty('Il prossimo sogno, insieme.','Un viaggio, una serata speciale o un giorno che aspettate.','Crea un countdown','new-countdown','clock'))+'</div><details id="countdownArchive" class="countdown-archive" '+(countdownArchiveOpen?'open':'')+'><summary>'+icon('clock')+'I countdown passati <span>'+past.length+'</span></summary><p class="field-help">Le attese concluse restano qui e nel calendario.</p><div class="countdown-grid">'+(past.length?past.map(countdownCard).join(''):'<p class="muted">Le vostre prossime attese diventeranno ricordi qui.</p>')+'</div></details>';
+}
+$('view').addEventListener('toggle',e=>{if(e.target.id==='countdownArchive')countdownArchiveOpen=e.target.open;},true);
+function tickCountdowns(){
+ if(!state)return;
+ const day=DiaryInteraction.countdownDays('2000-01-01');
+ if(countdownClockDay!==null&&day!==countdownClockDay){countdownClockDay=day;if(view==='countdown'||view==='calendario'){render();return;}}
+ countdownClockDay=day;
+ for(const node of document.querySelectorAll('[data-countdown-days]')){const days=DiaryInteraction.countdownDays(node.dataset.countdownDays);if(days>=0)node.textContent=days===0?'Oggi':days;}
+}
+function countdownPreview(){
+ $('countdownPhotoPreview').innerHTML=countdownPhotoDraft?'<img src="'+esc(countdownPhotoDraft)+'" alt="Immagine del countdown">':'';
+ $('removeCountdownPhoto').hidden=!countdownPhotoDraft;
+}
+function openCountdown(id=null){
+ const event=id?state.countdowns.find(c=>c.id===id):null;if(id&&!event)return;
+ countdownPhotoSession++;countdownEdited=id;countdownPhotoDraft=event?.photo||'';countdownPhotoPending=false;
+ $('countdownForm').reset();$('saveCountdown').disabled=false;$('countdownName').value=event?.title||'';$('countdownDate').value=event?.date||localDay();
+ $('countdownTitle').textContent=event?'Il nostro countdown':'Un nuovo countdown';$('deleteCountdown').hidden=!event;countdownPreview();$('countdownDialog').showModal();
+}
+$('countdownPhoto').onchange=async e=>{
+ const file=e.target.files[0],session=countdownPhotoSession;e.target.value='';if(!file)return;
+ countdownPhotoPending=true;$('saveCountdown').disabled=true;
+ try{if(file.size>20*1024*1024)throw Error('Scegli una foto sotto i 20 MB');const url=await mediaURL(file,1800);if(session!==countdownPhotoSession)return;countdownPhotoDraft=url;countdownPreview();}catch(error){toast(error.message);}finally{if(session===countdownPhotoSession){countdownPhotoPending=false;$('saveCountdown').disabled=false;}}
+};
+$('countdownDialog').addEventListener('close',()=>{countdownPhotoSession++;countdownPhotoPending=false;countdownEdited=null;countdownPhotoDraft='';});
+$('removeCountdownPhoto').onclick=()=>{countdownPhotoDraft='';countdownPreview();};
+$('countdownForm').onsubmit=async e=>{e.preventDefault();if(countdownPhotoPending)return;
+ await withSave(e.submitter,async()=>{if(countdownEdited&&!state.countdowns.some(c=>c.id===countdownEdited))throw Error('Questo countdown è stato eliminato dall’altro diario');await addOp('countdown',countdownEdited||uuid(),{title:$('countdownName').value.trim(),date:$('countdownDate').value,photo:countdownPhotoDraft});$('countdownDialog').close();toast('Countdown salvato nel diario e nel calendario');});
+};
+$('deleteCountdown').onclick=()=>{const event=state.countdowns.find(c=>c.id===countdownEdited);if(!event)return;$('deleteCountdownName').textContent=event.title;$('deleteCountdownDialog').showModal();};
+$('confirmDeleteCountdown').onclick=async e=>withSave(e.currentTarget,async()=>{const id=countdownEdited;if(!id)return;await addOp('delete-countdown',id,{});$('deleteCountdownDialog').close();$('countdownDialog').close();toast('Countdown eliminato. La cancellazione passerà all’altro diario al collegamento.');});
 function renderLetters(){
- return '<div class="heading-row"><div class="page-heading"><p class="eyebrow">TRA ME E TE</p><h1>Le parole <em>restano.</em></h1><p>Un pensiero da aprire, leggere e rileggere.</p></div><button class="primary" data-action="write-letter">'+icon('plus')+'Scrivi</button></div><div class="letter-grid">'+(state.letters.length?state.letters.map(l=>'<button class="letter-card" data-letter="'+esc(l.id)+'"><span class="letter-symbol">'+icon('letter')+'</span><span class="badge">'+(l.author===author?'Da te, con amore':'Da '+esc(nameOf(l.author,l.name)))+'</span><h2>'+esc(l.title)+'</h2><p>'+esc(l.body)+'</p><small>'+new Date(l.time).toLocaleDateString('it-IT',{day:'numeric',month:'long',year:'numeric'})+'</small></button>').join(''):empty('Ci sono cose che è bello scriversi.','Una lettera lunga o due righe al volo. Il diario conserverà le vostre parole.','Scrivi la prima lettera','write-letter','letter'))+'</div>';
+ return '<button class="text-button back-link" data-view="ricordi">'+icon('left')+'Tutte le raccolte</button><div class="heading-row"><div class="page-heading"><p class="eyebrow">TRA ME E TE</p><h1>Le parole <em>restano.</em></h1><p>Un pensiero da aprire, leggere e rileggere.</p></div><button class="primary" data-action="write-letter">'+icon('plus')+'Scrivi</button></div><div class="letter-grid">'+(state.letters.length?state.letters.map(l=>'<button class="letter-card" data-letter="'+esc(l.id)+'"><span class="letter-symbol">'+icon('letter')+'</span><span class="badge">'+(l.author===author?'Da te, con amore':'Da '+esc(nameOf(l.author,l.name)))+'</span><h2>'+esc(l.title)+'</h2><p>'+esc(l.body)+'</p><small>'+new Date(l.time).toLocaleDateString('it-IT',{day:'numeric',month:'long',year:'numeric'})+'</small></button>').join(''):empty('Ci sono cose che è bello scriversi.','Una lettera lunga o due righe al volo. Il diario conserverà le vostre parole.','Scrivi la prima lettera','write-letter','letter'))+'</div>';
 }
 function renderGames(){
  return '<div class="page-heading"><p class="eyebrow">ANCORA QUALCOSA DA SCOPRIRE</p><h1>Un po’ di noi.<br><em>Per gioco.</em></h1><p>Domande, piccole sfide e tempo da passare insieme.</p></div><div class="game-types">'+Object.entries(gameTypes).map(([key,g])=>'<button class="game-type" data-game-type="'+key+'">'+icon(g.icon)+'<strong>'+g.title+'</strong><small>'+g.subtitle+'</small></button>').join('')+'</div><div class="section-heading"><h2>Creati da noi</h2><p>'+state.games.length+' '+(state.games.length===1?'gioco':'giochi')+'</p></div><div class="game-list">'+(state.games.length?state.games.map(g=>{const r=state.results.filter(r=>r.game===g.id&&r.author===author).at(-1);return '<button class="saved-game" data-play="'+esc(g.id)+'"><span class="tile-icon">'+icon(gameTypes[g.type].icon)+'</span><div><strong>'+esc(g.title)+'</strong><small>'+esc(gameTypes[g.type].title)+' · '+g.questions.length+' domande</small><small>'+(r?'Ultimo risultato: '+r.score+'/'+r.total:g.author===author?'Creato da te':'Da '+esc(nameOf(g.author,g.name)))+'</small></div>'+icon('right','chevron')+'</button>';}).join(''):empty('Le regole le inventiamo noi.','Scegli un tipo di gioco qui sopra e prepara le tue domande. I contenuti li decideremo insieme.','','','games'))+'</div>';
 }
 let pageAnimations=[],pageGhost=null,motionToken=0;
-const pageRenderers={home:renderHome,ricordi:renderMemories,calendario:renderCalendar,lettere:renderLetters,giochi:renderGames};
+const pageRenderers={home:renderHome,ricordi:renderMemories,calendario:renderCalendar,lettere:renderLetters,countdown:renderCountdowns,giochi:renderGames};
 function reducedMotion(){return matchMedia('(prefers-reduced-motion: reduce)').matches;}
 function clearPageMotion(){
  motionToken++;for(const animation of pageAnimations)animation.cancel();pageAnimations=[];pageGhost?.remove();pageGhost=null;$('view').style.transform='';
@@ -150,9 +190,10 @@ function pageSnapshot(next=null){
  $('pageStage').append(node);node.scrollTop=next===null?$('view').scrollTop:0;return node;
 }
 function navigate(next,{fromHash=false,dragOffset=0}={}){
- if(!DiaryInteraction.pages.includes(next))return;
+ if(!DiaryInteraction.pages.includes(next)&&next!=='lettere')return;
+ if(next==='lettere')collection=null;
  if(next===view){clearPageMotion();positionNavigationBubble();return;}
- const previous=view,direction=DiaryInteraction.pages.indexOf(next)>DiaryInteraction.pages.indexOf(previous)?1:-1;
+ const previous=view,direction=DiaryInteraction.pages.indexOf(next)>DiaryInteraction.pages.indexOf(previous==='lettere'?'ricordi':previous)?1:-1;
  clearPageMotion();const token=motionToken,width=$('pageStage').clientWidth;
  const snapshot=reducedMotion()?null:pageSnapshot();pageGhost=snapshot;
  view=next;if(!fromHash)location.hash=next;render();$('view').scrollTo({top:0,behavior:'instant'});
@@ -161,18 +202,18 @@ function navigate(next,{fromHash=false,dragOffset=0}={}){
  pageAnimations=[snapshot.animate([{transform:'translate3d('+dragOffset+'px,0,0)'},{transform:'translate3d('+(-direction*width)+'px,0,0)'}],timing),$('view').animate([{transform:'translate3d('+(direction*width+dragOffset)+'px,0,0)'},{transform:'translate3d(0,0,0)'}],timing)];
  Promise.all(pageAnimations.map(a=>a.finished)).then(()=>{if(token===motionToken)clearPageMotion();}).catch(()=>{});
 }
-window.addEventListener('hashchange',()=>{const next=location.hash.slice(1);if(DiaryInteraction.pages.includes(next)&&next!==view)navigate(next,{fromHash:true});});
+window.addEventListener('hashchange',()=>{const next=location.hash.slice(1);if((DiaryInteraction.pages.includes(next)||next==='lettere')&&next!==view)navigate(next,{fromHash:true});});
 let navPointer=null,blockNavClickUntil=0;
 function renderNavigation(){
  const nav=$('bottomNav');
- if(!nav.querySelector('.nav-bubble'))nav.innerHTML='<span class="nav-bubble" aria-hidden="true"></span>'+[['home','home','Home'],['ricordi','album','Ricordi'],['calendario','calendar','Calendario'],['lettere','letter','Lettere'],['giochi','games','Giochi']].map(([id,ic,label])=>'<a href="#'+id+'" data-page="'+id+'">'+icon(ic)+'<span>'+label+'</span></a>').join('');
- for(const link of nav.querySelectorAll('a')){const selected=link.dataset.page===view;link.classList.toggle('active',selected);if(selected)link.setAttribute('aria-current','page');else link.removeAttribute('aria-current');}
+ if(!nav.querySelector('.nav-bubble'))nav.innerHTML='<span class="nav-bubble" aria-hidden="true"></span>'+[['home','home','Home'],['ricordi','album','Ricordi'],['calendario','calendar','Calendario'],['countdown','clock','Countdown'],['giochi','games','Giochi']].map(([id,ic,label])=>'<a href="#'+id+'" data-page="'+id+'">'+icon(ic)+'<span>'+label+'</span></a>').join('');
+ for(const link of nav.querySelectorAll('a')){const selected=link.dataset.page===(view==='lettere'?'ricordi':view);link.classList.toggle('active',selected);if(selected)link.setAttribute('aria-current','page');else link.removeAttribute('aria-current');}
  if(!navPointer)positionNavigationBubble();
 }
 function positionNavigationBubble(clientX=null){
  const nav=$('bottomNav'),links=[...nav.querySelectorAll('a')];if(!links.length)return;
  const box=nav.getBoundingClientRect(),first=links[0].getBoundingClientRect(),last=links.at(-1).getBoundingClientRect();
- const index=clientX===null?Math.max(0,DiaryInteraction.pages.indexOf(view)):DiaryInteraction.navIndex(clientX,first.left,last.right,links.length),target=links[index].getBoundingClientRect();
+ const index=clientX===null?Math.max(0,DiaryInteraction.pages.indexOf(view==='lettere'?'ricordi':view)):DiaryInteraction.navIndex(clientX,first.left,last.right,links.length),target=links[index].getBoundingClientRect();
  const left=clientX===null?target.left:Math.max(first.left,Math.min(last.left,clientX-first.width/2));
  nav.style.setProperty('--bubble-x',(left-box.left-nav.clientLeft)+'px');nav.style.setProperty('--bubble-width',target.width+'px');
  for(let i=0;i<links.length;i++)links[i].classList.toggle('nav-preview',clientX!==null&&i===index);
@@ -200,6 +241,7 @@ $('view').addEventListener('click',e=>{
  if(b.dataset.view)return navigate(b.dataset.view);
  if(b.dataset.collection){collection=b.dataset.collection;selected='Tutti';if(view!=='ricordi')navigate('ricordi');else render();return;}
  if(b.dataset.cat){selected=b.dataset.cat;render();return;}
+ if(b.dataset.countdown){openCountdown(b.dataset.countdown);return;}
  if(b.dataset.open){active=b.dataset.open;renderDetail();$('detailDialog').showModal();return;}
  if(b.dataset.day){calendarDay=b.dataset.day;render();return;}
  if(b.dataset.month){calendarMonth=new Date(calendarMonth.getFullYear(),calendarMonth.getMonth()+Number(b.dataset.month),1);calendarDay=localDay(calendarMonth);render();return;}
@@ -208,6 +250,7 @@ $('view').addEventListener('click',e=>{
  if(b.dataset.play){startGame(b.dataset.play);return;}
  const action=b.dataset.action;
  if(action==='new')openNew();
+ if(action==='new-countdown')openCountdown();
  if(action==='cover')$('coverInput').click();
  if(action==='all-collections'){collection=null;selected='Tutti';render();}
  if(action==='category'){$('categoryForm').reset();$('categoryDialog').showModal();}
@@ -362,6 +405,7 @@ $('scanCode').onclick=guarded(async()=>{
 
 let profileBaseline=null,partnerPhotoDraft='';
 function openProfile(){
+ $('themeSelect').value=DiaryPreferences.theme;
  const profile=state.profiles[author];profileDraft=profile?.photo||'';
  $('firstNameInput').value=profile?.firstName||(myName==='Io'?'':myName);$('lastNameInput').value=profile?.lastName||'';
  $('profilePreview').innerHTML='<span class="avatar">'+avatar(profile)+'</span>';
@@ -492,6 +536,12 @@ function updateInstallUI(){
 window.addEventListener('diary-offline',event=>{updateInstallUI();if(window.diaryBoot.ready)reportDiagnostic('offline-state',{phase:event.detail.phase});});
 $('retryOffline').onclick=()=>DiaryOffline.start();
 $('reloadDiary').onclick=()=>location.reload();
+$('themeSelect').onchange=e=>{DiaryPreferences.setTheme(e.target.value);toast('Aspetto aggiornato su questo dispositivo');};
+$('forceUpdate').onclick=async e=>withSave(e.currentTarget,async()=>{
+ const status=$('updateStatus');status.textContent='Controllo della versione e della copia offline…';
+ try{const result=await DiaryOffline.update();if(result.version>VERSION){status.textContent='Aggiornamento pronto. Riapertura del diario…';location.reload();}else{status.textContent='La versione '+VERSION+' è già aggiornata e pronta offline. L’icona installata è gestita da iOS.';toast('Il diario è già aggiornato');}}
+ catch(error){status.textContent=error.message;throw error;}
+});
 $('changePerson').onclick=()=>{$('profileDialog').close();openIdentityPicker();};
 async function adoptPolicy(policy){
  const checked=await DiaryAccess.matchPolicy(accessPolicy,policy);
@@ -557,7 +607,7 @@ function measureScreen(){
  ].join('\n');
 }
 $('screenCheck').addEventListener('toggle',()=>{if($('screenCheck').open)measureScreen();});
-$('measureScreen').onclick=measureScreen;
+$('measureScreen').onclick=()=>{DiaryViewport.refresh();requestAnimationFrame(measureScreen);};
 let deleteMemoryId=null;
 $('confirmDeleteMemory').onclick=async e=>withSave(e.currentTarget,async()=>{
  const target=deleteMemoryId;if(!target||!state.memories.some(m=>m.id===target))return;
@@ -595,7 +645,7 @@ $('view').addEventListener('touchmove',e=>{
  const touch=e.touches[0],dx=touch.clientX-start.x,dy=touch.clientY-start.y;
  if(Math.abs(dy)>Math.abs(dx)&&!start.next){pageTouch=null;return;}
  if(Math.abs(dx)<12||Math.abs(dx)<Math.abs(dy)*1.3||Math.abs($('view').scrollTop-start.top)>12)return;
- const index=DiaryInteraction.pages.indexOf(view),next=DiaryInteraction.pages[index+(dx<0?1:-1)];
+ const index=DiaryInteraction.pages.indexOf(view==='lettere'?'ricordi':view),next=DiaryInteraction.pages[index+(dx<0?1:-1)];
  if(!next)return;
  if(start.next!==next){pageGhost?.remove();pageGhost=reducedMotion()?null:pageSnapshot(next);start.next=next;}
  start.dx=Math.max(-$('pageStage').clientWidth,Math.min($('pageStage').clientWidth,dx));
