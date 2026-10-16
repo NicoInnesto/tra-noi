@@ -169,3 +169,12 @@ body.guide-body{height:auto;min-height:100svh;overflow:auto}.guide-page{max-widt
 .collection-card>.tile-icon{color:var(--tile-accent,var(--pink))}
 
 [data-theme=light] .stat-strip strong{color:#8a456b}[data-theme=light] .home-topline span:last-child{color:var(--muted)}
+
+/* Individual scores retain the star and the local profile nickname. */
+.memory-meta{align-items:flex-start;gap:10px;flex-wrap:wrap}
+.memory-meta .memory-ratings{display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0}
+.memory-meta .memory-rating{display:flex;align-items:center;gap:5px;min-width:0;text-align:left}
+.memory-rating>span{overflow-wrap:anywhere}.memory-rating svg{flex:0 0 14px;width:14px;height:14px}
+.memory-footer{display:flex;flex-direction:column;align-items:stretch;gap:10px;margin-top:24px}
+.memory-footer>.text-button{align-self:flex-start}.memory-footer .delete-memory-section{margin-top:2px}
+.media-actions{display:flex;justify-content:flex-end}
