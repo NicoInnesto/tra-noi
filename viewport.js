@@ -3,30 +3,31 @@
 const doc=root.document;
 const installed=()=>root.navigator.standalone===true||root.matchMedia('(display-mode: standalone)').matches;
 const ios=/iPad|iPhone|iPod/.test(root.navigator.userAgent)||(root.navigator.platform==='MacIntel'&&root.navigator.maxTouchPoints>1);
-let pending=false,frame=0,attempts=0,last='non necessario';
+let pending=false,attempts=0,last='non necessario';
 const editing=()=>doc.activeElement?.matches('input,textarea,select,[contenteditable]:not([contenteditable="false"])');
 function refresh(){
- frame=0;
  if(!pending||doc.hidden||editing()||doc.querySelector('dialog[open]'))return;
- // On affected Home Screen installations, focusing a readonly field refreshes
- // the native bottom area without opening the keyboard. Do not resize the page
- // using screen.height: those pixels may belong to the system status bar.
+ // Keep focus inside the actual touch handler: deferred focus can change
+ // activeElement without refreshing iOS's native viewport. This workaround
+ // still requires confirmation on the affected physical device.
  const field=doc.createElement('textarea');
  field.readOnly=true;field.tabIndex=-1;field.className='viewport-refresh';
  field.setAttribute('aria-label','Aggiornamento schermata');doc.body.append(field);
  try{field.focus({preventScroll:true});}catch{field.remove();return;}
  if(doc.activeElement!==field){field.remove();last='in attesa del primo tocco';return;}
- pending=false;attempts++;last='ricalcolo eseguito';
+ pending=false;attempts++;last='focus al tocco eseguito';
  root.requestAnimationFrame(()=>{if(doc.activeElement===field)field.blur();field.remove();});
 }
-function schedule(){if(pending&&!frame)frame=root.requestAnimationFrame(refresh);}
-function resume(){if(!ios||!installed()||doc.hidden)return;pending=true;last='ricalcolo in attesa';schedule();}
+function resume(){if(!ios||!installed()||doc.hidden)return;pending=true;last='in attesa del primo tocco';}
 root.DiaryViewport={get status(){return last+' · '+attempts;}};
 if(!ios)return;
 root.addEventListener('pageshow',resume);
 doc.addEventListener('visibilitychange',()=>{if(!doc.hidden)resume();});
 root.addEventListener('orientationchange',resume);
-// iOS may require a gesture before accepting programmatic focus.
-doc.addEventListener('pointerup',schedule,{passive:true});
+// Do not defer to a timer/frame and do not intercept a tap intended for editing.
+doc.addEventListener('touchend',e=>{
+ if(e.touches?.length||e.target?.closest?.('input,textarea,select,[contenteditable]'))return;
+ refresh();
+},{passive:true});
 resume();
 })(window);
