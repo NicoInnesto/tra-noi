@@ -1,7 +1,7 @@
 'use strict';
 window.diaryBoot=window.diaryBoot||{phase:'Caricamento del diario',ready:false};
-const VERSION=26;
-const WIRE_VERSION=26;
+const VERSION=27;
+const WIRE_VERSION=27;
 const uuid=()=>crypto.randomUUID?crypto.randomUUID():([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g,c=>(c^crypto.getRandomValues(new Uint8Array(1))[0]&15>>c/4).toString(16));
 const $=id=>document.getElementById(id);
 const storagePrefix='tra-noi:'+new URL('./',location.href).pathname+':';
@@ -47,13 +47,43 @@ let author=settingsStorage.getItem('diary-author');
 if(!author){author=uuid();settingsStorage.setItem('diary-author',author);}
 let myName=settingsStorage.getItem('diary-name')||'Io';
 let ops=[],acks=new Set(),active=null,db,pc,channel,role,pairId,pollTimer,sendTail=Promise.resolve(),peerName='',renderedActivity=null;
-let state,view='home',collection=null,selected='Tutti',calendarMonth=new Date(new Date().getFullYear(),new Date().getMonth(),1),calendarDay=localDay(),profileDraft='',gameDraft=null,playSession=null;
+let state,view='home',collection=null,selected='Tutti',calendarMonth=new Date(new Date().getFullYear(),new Date().getMonth(),1),calendarDay=localDay(),profileDraft='',gameDraft=null,playSession=null,activeLetterId=null;
 const transfers=new Map();
 function localDay(date=new Date()){return new Date(date-date.getTimezoneOffset()*60000).toISOString().slice(0,10);}
 function formatDate(date,options={day:'numeric',month:'long',year:'numeric'}){return date?new Date(date+'T12:00:00').toLocaleDateString('it-IT',options):'Prima del diario · senza data';}
 function nameOf(id,fallback='Il tuo amore'){return state.profiles[id]?.firstName||ops.findLast(o=>o.author===id&&o.name&&o.name!=='Io')?.name||fallback;}
 function avatar(profile,fallback=''){return profile?.photo?'<img src="'+esc(profile.photo)+'" alt="">':profile?.firstName?esc(profile.firstName.slice(0,1).toUpperCase()):fallback||icon('user');}
 function toast(s){const host=document.querySelector('dialog[open]')||document.body;host.append($('toast'));$('toast').textContent=s;$('toast').style.display='block';clearTimeout(toast.timer);toast.timer=setTimeout(()=>$('toast').style.display='none',4500);}
+function displayName(person){return state?.profiles?.[person]?.nickname||nameOf(person);}
+function updatePartnerStatus(){
+ const online=channel?.readyState==='open'&&!!peerPerson&&syncStarted&&!['failed','disconnected','closed'].includes(pc?.connectionState);
+ $('offlineSummary').textContent=online?'Connesso con '+displayName(peerPerson):'Offline';$('partnerDot').classList.toggle('online',online);
+}
+let removalAction=null;
+function confirmRemoval(title,description,perform){removalAction=perform;$('manageDeleteTitle').textContent=title;$('manageDeleteDescription').textContent=description;$('manageDeleteDialog').showModal();}
+$('manageDeleteConfirm').onclick=async e=>withSave(e.currentTarget,async()=>{const perform=removalAction;if(!perform)return;const message=await perform();$('manageDeleteDialog').close();toast(message||'Eliminato. La modifica sarà condivisa al prossimo collegamento.');});
+$('manageDeleteDialog').addEventListener('close',()=>{removalAction=null;});
+const profileSections={profile:['user','Il mio profilo','Foto e dati personali'],connect:['link','Collega i diari','Collegamento diretto con QR'],theme:['sparkle','Aspetto','Chiaro, scuro o automatico'],updates:['clock','Aggiornamenti','Versione '+VERSION],installation:['home','Installazione','La guida per il tuo iPhone'],backup:['album','Backup e ripristino','Una copia dei vostri ricordi'],date:['calendar','La nostra data','Il giorno in cui è iniziato tutto'],screen:['check','Schermo e assistenza','Layout e diagnostica locale'],admin:['lock','Amministrazione','Gestione dei due profili']};
+function updateProfileMenu(){
+ if(!state)return;
+ $('profileSummary').innerHTML='<span class="avatar">'+avatar(state.profiles[author])+'</span><h3>'+esc(personName())+'</h3>';
+ if(!$('profileMenu').children.length)$('profileMenu').innerHTML=Object.entries(profileSections).map(([key,[ic,title,detail]])=>'<button class="settings-row" data-profile-section="'+key+'" '+(key==='admin'?'id="profileAdminRow"':'')+'><span class="settings-row-icon">'+icon(ic)+'</span><span><strong>'+title+'</strong><small>'+detail+'</small></span>'+icon('right','settings-chevron')+'</button>').join('');
+ $('profileAdminRow').hidden=author!=='one';$('appVersion').textContent=String(VERSION);
+}
+function showProfileSection(section){
+ if(section!=='home'&&!Object.hasOwn(profileSections,section)||section==='admin'&&author!=='one')return;
+ $('profileHome').hidden=section!=='home';$('profileBack').hidden=section==='home';$('profileHeading').textContent=section==='home'?'Il tuo spazio':profileSections[section][1];
+ for(const panel of document.querySelectorAll('[data-profile-panel]'))panel.hidden=panel.dataset.profilePanel!==section;
+ $('profileDialog').scrollTop=0;if(section==='screen')requestAnimationFrame(measureScreen);
+}
+$('profileBack').innerHTML=icon('left');$('profileBack').onclick=()=>showProfileSection('home');
+$('profileDialog').addEventListener('click',e=>{const row=e.target.closest('[data-profile-section]');if(row)showProfileSection(row.dataset.profileSection);});
+$('removeProfilePhoto').onclick=()=>confirmRemoval('Rimuovere la tua foto profilo?','La modifica verrà applicata quando premi Salva profili.',async()=>{profileDraft='';$('profilePreview').innerHTML='<span class="avatar">'+icon('user')+'</span>';$('removeProfilePhoto').hidden=true;return 'Premi Salva profili per confermare la rimozione';});
+$('removePartnerPhoto').onclick=()=>confirmRemoval('Rimuovere la sua foto profilo?','La modifica verrà applicata quando premi Salva profili.',async()=>{if(!adminKey||author!=='one')throw Error('Sblocca l’amministrazione');partnerPhotoDraft='';$('partnerProfile').querySelector('.avatar').innerHTML=icon('user');$('removePartnerPhoto').hidden=true;return 'Premi Salva profili per confermare la rimozione';});
+function openCategories(){
+ $('categoryForm').reset();$('categoryManager').innerHTML='<h3>Le categorie aggiunte</h3><p class="field-help">Eliminando una categoria, i suoi ricordi restano in Esperienze → Altro.</p>'+state.customCategories.filter(c=>!DiaryModel.defaults.includes(c.name)&&c.name!=='Altro').map(c=>'<div class="category-manage-row"><span>'+esc(c.name)+'</span><button class="text-button danger-button" data-delete-category="'+esc(c.name)+'">Elimina</button></div>').join('');$('categoryDialog').showModal();
+}
+$('categoryManager').addEventListener('click',e=>{const b=e.target.closest('[data-delete-category]');if(!b)return;const name=b.dataset.deleteCategory;confirmRemoval('Eliminare “'+name+'”?','I ricordi non saranno cancellati: saranno raccolti in Altro. La categoria verrà rimossa anche dall’altro diario al collegamento.',async()=>{await addOp('delete-category',uuid(),{name});selected='Tutti';render();$('categoryDialog').close();});});
 function store(name,value){return new Promise((resolve,reject)=>{const tx=db.transaction(name,'readwrite');tx.objectStore(name).put(value);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error);});}
 let mutationTail=Promise.resolve();
 function mergeOperations(incoming,administration=null){
@@ -100,19 +130,21 @@ function collectionTile(key,wide=false){const s=sectionInfo[key],n=state.memorie
 function memoryCard(a){const photo=photoOf(a),ratings=Object.values(a.ratings),average=ratings.length?ratings.reduce((n,r)=>n+r.score,0)/ratings.length:null;return '<button class="memory-card" data-open="'+esc(a.id)+'"><div class="memory-cover tone-'+a.section+'">'+(photo?'<img src="'+esc(photo.url)+'" alt="" loading="lazy">':icon(a.section==='experiences'?categoryIcon(a.category):sectionInfo[a.section].icon))+'</div><div class="memory-body"><span class="badge">'+esc(a.category)+'</span><h3>'+esc(a.title)+'</h3><p>'+esc(formatDate(a.date))+'</p><div class="memory-meta"><span>'+(average!==null?icon('star')+average.toLocaleString('it-IT',{maximumFractionDigits:1})+'/10':icon('heart')+'Da raccontare')+'</span><span>'+a.media.length+' foto/video'+'</span></div>'+(pending(a.id)?'<div class="sync-pending">Da condividere con l’altro diario</div>':'')+'</div></button>';}
 function render(){
  state=DiaryModel.project(ops);
- $('profileButton').innerHTML=avatar(state.profiles[author]);
+ $('profileButton').innerHTML=avatar(state.profiles[author]);updatePartnerStatus();updateProfileMenu();
  renderNavigation();
  $('view').innerHTML=({home:renderHome,ricordi:renderMemories,calendario:renderCalendar,lettere:renderLetters,countdown:renderCountdowns,giochi:renderGames}[view])();
  $('storage').textContent='Archivio locale: circa '+(ops.reduce((n,o)=>n+new Blob([JSON.stringify(o)]).size,0)/1024/1024).toFixed(1)+' MB. Gli originali in Foto occupano spazio separatamente.';
  tickCounter();
  if(active&&!state.memories.some(m=>m.id===active)){if($('photoViewer').open)$('photoViewer').close();if($('detailDialog').open)$('detailDialog').close();active=null;}
  if(active)renderDetail();
+ if(playSession&&!state.games.some(g=>g.id===playSession.game.id)){$('gameDialog').close();playSession=null;}
+ if(activeLetterId&&!state.letters.some(l=>l.id===activeLetterId))$('letterDialog').close();
  updateAdministrationUI();
  updateInstallUI();
 }
 function renderHome(){
  const date=state.settings.anniversaryStart?.date||state.settings.anniversary||'',mediaCount=state.memories.reduce((n,a)=>n+a.media.length,0);
- return '<div class="home-topline"><span>'+esc(new Date().toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long'}))+'</span><span>'+icon('lock')+'Il nostro spazio</span></div><div class="home-layout"><div><section class="hero">'+(state.settings.cover?'<img class="hero-image" src="'+esc(state.settings.cover)+'" alt="La nostra foto">':'<div class="hero-orbit"></div><div class="hero-orbit second"></div><div class="hero-heart">'+icon('heart')+'</div>')+'<button class="photo-edit" data-action="cover">'+icon('camera')+(state.settings.cover?'Cambia foto':'La nostra foto')+'</button><div class="hero-content"><div><span class="hero-kicker">LA NOSTRA STORIA</span><h1>Tu, io.<br><em>Tutto il resto.</em></h1></div><div class="together"><div class="together-title">Insieme da</div><div class="counter" aria-label="Tempo trascorso insieme"><div><strong id="days">—</strong><span>giorni</span></div><div><strong id="hours">—</strong><span>ore</span></div><div><strong id="minutes">—</strong><span>minuti</span></div><div><strong id="seconds">—</strong><span>secondi</span></div></div><p class="together-since">'+(date?'Dal '+esc(formatDate(date))+(state.settings.anniversaryStart?' · ore '+esc(state.settings.anniversaryStart.time):''):'Scegli la vostra data nel profilo')+'</p></div></div></section><div class="stat-strip"><div><strong>'+state.memories.length+'</strong><span>ricordi</span></div><div><strong>'+mediaCount+'</strong><span>foto e video</span></div><div><strong>'+state.letters.length+'</strong><span>lettere</span></div></div></div><div class="home-side"><div class="section-heading"><h2>I nostri traguardi.</h2><button class="text-button" data-view="ricordi">Esplora '+icon('right')+'</button></div><div class="collection-grid">'+Object.keys(sectionInfo).map(key=>collectionTile(key)).join('')+'<button class="collection-card tone-letters" data-view="lettere"><span class="tile-icon">'+icon('letter')+'</span><strong>Ti lascio un pensiero.</strong><small>Una lettera per te.</small>'+icon('right','chevron')+'</button></div></div></div>';
+ return '<div class="home-topline"><span>'+esc(new Date().toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long'}))+'</span><span>'+icon('lock')+'Il nostro spazio</span></div><div class="home-layout"><div><section class="hero">'+(state.settings.cover?'<img class="hero-image" src="'+esc(state.settings.cover)+'" alt="La nostra foto">':'<div class="hero-orbit"></div><div class="hero-orbit second"></div><div class="hero-heart">'+icon('heart')+'</div>')+(state.settings.cover?'<button class="cover-remove" data-action="remove-cover" aria-label="Rimuovi foto della Home">×</button>':'')+'<button class="photo-edit" data-action="cover">'+icon('camera')+(state.settings.cover?'Cambia foto':'La nostra foto')+'</button><div class="hero-content"><div><span class="hero-kicker">LA NOSTRA STORIA</span><h1>Tu, io.<br><em>Tutto il resto.</em></h1></div><div class="together"><div class="together-title">Insieme da</div><div class="counter" aria-label="Tempo trascorso insieme"><div><strong id="days">—</strong><span>giorni</span></div><div><strong id="hours">—</strong><span>ore</span></div><div><strong id="minutes">—</strong><span>minuti</span></div><div><strong id="seconds">—</strong><span>secondi</span></div></div><p class="together-since">'+(date?'Dal '+esc(formatDate(date))+(state.settings.anniversaryStart?' · ore '+esc(state.settings.anniversaryStart.time):''):'Scegli la vostra data nel profilo')+'</p></div></div></section><div class="stat-strip"><div><strong>'+state.memories.length+'</strong><span>ricordi</span></div><div><strong>'+mediaCount+'</strong><span>foto e video</span></div><div><strong>'+state.letters.length+'</strong><span>lettere</span></div></div></div><div class="home-side"><div class="section-heading"><h2>I nostri traguardi.</h2><button class="text-button" data-view="ricordi">Esplora '+icon('right')+'</button></div><div class="collection-grid">'+Object.keys(sectionInfo).map(key=>collectionTile(key)).join('')+'<button class="collection-card tone-letters" data-view="lettere"><span class="tile-icon">'+icon('letter')+'</span><strong>Ti lascio un pensiero.</strong><small>Una lettera per te.</small>'+icon('right','chevron')+'</button></div></div></div>';
 }
 function tickCounter(){
  tickCountdowns();
@@ -174,8 +206,14 @@ $('confirmDeleteCountdown').onclick=async e=>withSave(e.currentTarget,async()=>{
 function renderLetters(){
  return '<button class="text-button back-link" data-view="ricordi">'+icon('left')+'Tutte le raccolte</button><div class="heading-row"><div class="page-heading"><p class="eyebrow">TRA ME E TE</p><h1>Le parole <em>restano.</em></h1><p>Un pensiero da aprire, leggere e rileggere.</p></div><button class="primary" data-action="write-letter">'+icon('plus')+'Scrivi</button></div><div class="letter-grid">'+(state.letters.length?state.letters.map(l=>'<button class="letter-card" data-letter="'+esc(l.id)+'"><span class="letter-symbol">'+icon('letter')+'</span><span class="badge">'+(l.author===author?'Da te, con amore':'Da '+esc(nameOf(l.author,l.name)))+'</span><h2>'+esc(l.title)+'</h2><p>'+esc(l.body)+'</p><small>'+new Date(l.time).toLocaleDateString('it-IT',{day:'numeric',month:'long',year:'numeric'})+'</small></button>').join(''):empty('Ci sono cose che è bello scriversi.','Una lettera lunga o due righe al volo. Il diario conserverà le vostre parole.','Scrivi la prima lettera','write-letter','letter'))+'</div>';
 }
+function savedGame(g){
+ const players=[...new Set(state.results.filter(r=>r.game===g.id).map(r=>r.author))];
+ const results=players.map(person=>{const r=state.results.filter(r=>r.game===g.id&&r.author===person).at(-1);return '<span class="game-result-line">'+(Number.isInteger(r.score)?'Ultimo risultato di '+esc(displayName(person))+': <b>'+r.score+'/'+r.total+'</b>':'Ultima partita di '+esc(displayName(person))+': <b>completata</b>')+'</span>';}).join('');
+ const mine=state.results.some(r=>r.game===g.id&&r.author===author);
+ return '<article class="saved-game-card"><button class="saved-game" data-play="'+esc(g.id)+'"><span class="tile-icon">'+icon(gameTypes[g.type].icon)+'</span><span class="saved-game-info"><strong>'+esc(g.title)+'</strong><small>'+esc(gameTypes[g.type].title)+' · '+g.questions.length+' '+(g.questions.length===1?'domanda':'domande')+'</small><small>Creato da '+esc(displayName(g.author))+'</small></span>'+icon('right','chevron')+'</button><div class="game-results">'+(results||'<span class="muted">Ancora tutto da giocare.</span>')+'</div>'+((g.author===author||mine)?'<div class="game-manage">'+(mine?'<button class="text-button" data-clear-results="'+esc(g.id)+'">Rimuovi i miei risultati</button>':'')+(g.author===author?'<button class="text-button danger-button" data-delete-game="'+esc(g.id)+'">Elimina il mio gioco</button>':'')+'</div>':'')+'</article>';
+}
 function renderGames(){
- return '<div class="page-heading"><p class="eyebrow">ANCORA QUALCOSA DA SCOPRIRE</p><h1>Un po’ di noi.<br><em>Per gioco.</em></h1><p>Domande, piccole sfide e tempo da passare insieme.</p></div><div class="game-types">'+Object.entries(gameTypes).map(([key,g])=>'<button class="game-type" data-game-type="'+key+'">'+icon(g.icon)+'<strong>'+g.title+'</strong><small>'+g.subtitle+'</small></button>').join('')+'</div><div class="section-heading"><h2>Creati da noi</h2><p>'+state.games.length+' '+(state.games.length===1?'gioco':'giochi')+'</p></div><div class="game-list">'+(state.games.length?state.games.map(g=>{const r=state.results.filter(r=>r.game===g.id&&r.author===author).at(-1);return '<button class="saved-game" data-play="'+esc(g.id)+'"><span class="tile-icon">'+icon(gameTypes[g.type].icon)+'</span><div><strong>'+esc(g.title)+'</strong><small>'+esc(gameTypes[g.type].title)+' · '+g.questions.length+' domande</small><small>'+(r?'Ultimo risultato: '+r.score+'/'+r.total:g.author===author?'Creato da te':'Da '+esc(nameOf(g.author,g.name)))+'</small></div>'+icon('right','chevron')+'</button>';}).join(''):empty('Le regole le inventiamo noi.','Scegli un tipo di gioco qui sopra e prepara le tue domande. I contenuti li decideremo insieme.','','','games'))+'</div>';
+ return '<div class="page-heading"><p class="eyebrow">ANCORA QUALCOSA DA SCOPRIRE</p><h1>Un po’ di noi.<br><em>Per gioco.</em></h1><p>Entrambi potete creare giochi e mettervi alla prova. Ogni risultato conserva il nome di chi ha giocato.</p></div><div class="game-types">'+Object.entries(gameTypes).map(([key,g])=>'<button class="game-type" data-game-type="'+key+'">'+icon(g.icon)+'<strong>'+g.title+'</strong><small>'+g.subtitle+'</small></button>').join('')+'</div><div class="section-heading"><h2>Creati da noi</h2><p>'+state.games.length+' '+(state.games.length===1?'gioco':'giochi')+'</p></div><div class="game-list">'+(state.games.length?state.games.map(savedGame).join(''):empty('Le regole le inventiamo noi.','Scegli un tipo di gioco qui sopra e prepara le tue domande. I contenuti li decideremo insieme.','','','games'))+'</div>';
 }
 let pageAnimations=[],pageGhost=null,motionToken=0;
 const pageRenderers={home:renderHome,ricordi:renderMemories,calendario:renderCalendar,lettere:renderLetters,countdown:renderCountdowns,giochi:renderGames};
@@ -247,13 +285,16 @@ $('view').addEventListener('click',e=>{
  if(b.dataset.month){calendarMonth=new Date(calendarMonth.getFullYear(),calendarMonth.getMonth()+Number(b.dataset.month),1);calendarDay=localDay(calendarMonth);render();return;}
  if(b.dataset.letter){openLetter(b.dataset.letter);return;}
  if(b.dataset.gameType){openGameBuilder(b.dataset.gameType);return;}
+ if(b.dataset.deleteGame){const g=state.games.find(g=>g.id===b.dataset.deleteGame);if(g?.author===author)confirmRemoval('Eliminare “'+g.title+'”?','Il gioco e i risultati delle partite saranno rimossi da entrambi i diari al collegamento. I backup già salvati restano invariati.',()=>addOp('delete-game',g.id,{}));return;}
+ if(b.dataset.clearResults){const id=b.dataset.clearResults;confirmRemoval('Rimuovere i tuoi risultati?','I risultati dell’altra persona e il gioco restano presenti. Potrai giocare di nuovo.',()=>addOp('clear-game-results',id,{}));return;}
  if(b.dataset.play){startGame(b.dataset.play);return;}
  const action=b.dataset.action;
  if(action==='new')openNew();
  if(action==='new-countdown')openCountdown();
  if(action==='cover')$('coverInput').click();
+ if(action==='remove-cover')confirmRemoval('Rimuovere la foto della Home?','La Home tornerà allo sfondo del diario. La foto nella galleria dell’iPhone resta invariata.',()=>addOp('setting','our-story',{key:'cover',value:''}));
  if(action==='all-collections'){collection=null;selected='Tutti';render();}
- if(action==='category'){$('categoryForm').reset();$('categoryDialog').showModal();}
+ if(action==='category'){openCategories();}
  if(action==='write-letter')openLetter();
  if(action==='today'){calendarDay=localDay();calendarMonth=new Date(new Date().getFullYear(),new Date().getMonth(),1);render();}
 });
@@ -276,12 +317,13 @@ $('createForm').onsubmit=async e=>{e.preventDefault();const s=$('sectionInput').
 $('categoryForm').onsubmit=async e=>{e.preventDefault();const name=$('categoryName').value.trim();if(!name)return;if(state.categories.some(c=>c.toLocaleLowerCase()===name.toLocaleLowerCase()))return toast('Questa categoria esiste già');await withSave(e.submitter,async()=>{await addOp('category',uuid(),{name});$('categoryDialog').close();selected=name;render();toast('La vostra nuova categoria è pronta');});};
 async function withSave(button,fn){if(button?.disabled)return;if(button)button.disabled=true;try{await fn();}catch(e){toast(e.message||'Salvataggio non riuscito');}finally{if(button)button.disabled=false;}}
 function renderMediaGallery(a){
- const visible=a.media.map(m=>'<figure class="media-item">'+(m.type.startsWith('image/')?'<button class="photo-open" data-photo-open="'+esc(m.id)+'" aria-label="Apri foto: '+esc(m.name)+'"><img src="'+esc(m.url)+'" alt="'+esc(m.name)+'" loading="lazy"></button>':'<video controls playsinline preload="metadata" src="'+esc(m.url)+'"></video>')+'<button class="text-button" data-media-id="'+esc(m.id)+'" data-media-removed="true">Rimuovi dal ricordo</button></figure>').join('');
+ const visible=a.media.map(m=>'<figure class="media-item">'+(m.type.startsWith('image/')?'<button class="photo-open" data-photo-open="'+esc(m.id)+'" aria-label="Apri foto: '+esc(m.name)+'"><img src="'+esc(m.url)+'" alt="'+esc(m.name)+'" loading="lazy"></button>':'<video controls playsinline preload="metadata" src="'+esc(m.url)+'"></video>')+'<div class="media-actions"><button class="text-button" data-media-id="'+esc(m.id)+'" data-media-removed="true">Rimuovi dal ricordo</button><button class="text-button danger-button" data-delete-media="'+esc(m.id)+'">Elimina definitivamente</button></div></figure>').join('');
  const removed=a.removedMedia||[];
- return '<div class="gallery">'+visible+'</div>'+(removed.length?'<details class="removed-media"><summary>Foto e video rimossi ('+removed.length+')</summary><p class="field-help">Puoi ripristinarli. La rimozione non libera spazio e non modifica la galleria Foto dell’iPhone.</p>'+removed.map(m=>'<div class="removed-media-row"><span>'+esc(m.name)+'</span><button class="text-button" data-media-id="'+esc(m.id)+'" data-media-removed="false">Ripristina</button></div>').join('')+'</details>':'');
+ return '<div class="gallery">'+visible+'</div>'+(removed.length?'<details class="removed-media"><summary>Foto e video rimossi ('+removed.length+')</summary><p class="field-help">Puoi ripristinarli. La rimozione non libera spazio e non modifica la galleria Foto dell’iPhone.</p>'+removed.map(m=>'<div class="removed-media-row"><span>'+esc(m.name)+'</span><button class="text-button" data-media-id="'+esc(m.id)+'" data-media-removed="false">Ripristina</button><button class="text-button danger-button" data-delete-media="'+esc(m.id)+'">Elimina definitivamente</button></div>').join('')+'</details>':'');
 }
 $('detail').addEventListener('click',async e=>{
  const photo=e.target.closest('[data-photo-open]');if(photo){openPhotoViewer(photo.dataset.photoOpen);return;}
+ const permanent=e.target.closest('[data-delete-media]');if(permanent){const id=active,mediaId=permanent.dataset.deleteMedia;confirmRemoval('Eliminare questa foto o video?','Il file sarà eliminato dall’archivio dei diari al prossimo collegamento. La galleria dell’iPhone e i backup già esportati non cambiano.',async()=>{if($('photoViewer').open)$('photoViewer').close();await addOp('delete-media',id,{mediaId});});return;}
  const button=e.target.closest('button[data-media-id]');if(!button)return;
  const target=active,mediaId=button.dataset.mediaId,removed=button.dataset.mediaRemoved==='true';
  await withSave(button,async()=>{await addOp('media-state',target,{mediaId,removed});toast(removed?'Rimosso dal ricordo. Puoi ripristinarlo in “Foto e video rimossi”.':'Di nuovo nel vostro ricordo');});
@@ -290,7 +332,8 @@ function renderDetail(){
  const draft=renderedActivity===active&&$('comment')?{comment:$('comment').value,score:$('score').value}:null;
  const a=state.memories.find(a=>a.id===active);if(!a)return;const mine=a.ratings[author];
  const canRate=['experiences','dance'].includes(a.section);
- $('detail').innerHTML='<p class="eyebrow">'+esc(a.category)+'</p><h2>'+esc(a.title)+'</h2><div class="detail-meta"><span>'+esc(formatDate(a.date))+(a.endDate?' — '+esc(formatDate(a.endDate)):'')+'</span>'+(a.location?'<span>'+esc(a.location)+'</span>':'')+(a.recipient?'<span>Ricevuto da '+esc(a.recipient)+'</span>':'')+'</div>'+(a.description?'<p class="detail-description">'+esc(a.description)+'</p>':'')+'<p class="field-help">'+(pending(a.id)?'Custodito su questo dispositivo. Collegate i diari per condividerlo.':'I tuoi contributi sono stati ricevuti anche dall’altro diario.')+'</p>'+(canRate?'<div class="ratings">'+Object.entries(a.ratings).map(([id,r])=>'<div class="rating"><div class="rating-name">'+esc(nameOf(id,r.name))+'</div><strong>'+r.score+'<small> / 10</small></strong>'+(r.comment?'<p>'+esc(r.comment)+'</p>':'')+'</div>').join('')+'</div><form id="ratingForm"><div class="form-row"><label>Il tuo voto<select id="score">'+Array.from({length:10},(_,i)=>'<option '+((mine?.score||8)===i+1?'selected':'')+'>'+(i+1)+'</option>').join('')+'</select></label></div><label>Il tuo commento<textarea id="comment" maxlength="2000" placeholder="Che cosa ti è rimasto di questo momento?">'+esc(mine?.comment||'')+'</textarea></label><button class="primary" type="submit">Salva il tuo contributo</button></form>':'')+renderMediaGallery(a)+'<div class="delete-memory-section"><button class="text-button danger-button" id="deleteMemory">Elimina definitivamente il ricordo</button></div>';
+ $('detail').innerHTML='<p class="eyebrow">'+esc(a.category)+'</p><h2>'+esc(a.title)+'</h2><div class="detail-meta"><span>'+esc(formatDate(a.date))+(a.endDate?' — '+esc(formatDate(a.endDate)):'')+'</span>'+(a.location?'<span>'+esc(a.location)+'</span>':'')+(a.recipient?'<span>Ricevuto da '+esc(a.recipient)+'</span>':'')+'</div>'+(a.description?'<p class="detail-description">'+esc(a.description)+'</p>':'')+'<p class="field-help">'+(pending(a.id)?'Custodito su questo dispositivo. Collegate i diari per condividerlo.':'I tuoi contributi sono stati ricevuti anche dall’altro diario.')+'</p>'+(canRate?'<div class="ratings">'+Object.entries(a.ratings).map(([id,r])=>'<div class="rating"><div class="rating-name">'+esc(nameOf(id,r.name))+'</div><strong>'+r.score+'<small> / 10</small></strong>'+(r.comment?'<p>'+esc(r.comment)+'</p>':'')+'</div>').join('')+'</div><form id="ratingForm"><div class="form-row"><label>Il tuo voto<select id="score">'+Array.from({length:10},(_,i)=>'<option '+((mine?.score||8)===i+1?'selected':'')+'>'+(i+1)+'</option>').join('')+'</select></label></div><label>Il tuo commento<textarea id="comment" maxlength="2000" placeholder="Che cosa ti è rimasto di questo momento?">'+esc(mine?.comment||'')+'</textarea></label><button class="primary" type="submit">Salva il tuo contributo</button></form>':'')+(mine?'<button class="text-button danger-button" id="clearRating">Elimina il mio voto e commento</button>':'')+renderMediaGallery(a)+'<div class="delete-memory-section"><button class="text-button danger-button" id="deleteMemory">Elimina definitivamente il ricordo</button></div>';
+ if($('clearRating'))$('clearRating').onclick=()=>confirmRemoval('Eliminare il tuo contributo?','Voto e commento dell’altra persona restano presenti.',async()=>{renderedActivity=null;await addOp('clear-rating',a.id,{});});
  $('deleteMemory').onclick=()=>{deleteMemoryId=a.id;$('deleteMemoryTitle').textContent=a.title;$('deleteMemoryDialog').showModal();};
  renderedActivity=active;if(draft&&$('comment')){$('comment').value=draft.comment;$('score').value=draft.score;}
  if($('ratingForm'))$('ratingForm').onsubmit=async e=>{e.preventDefault();const data={score:Number($('score').value),comment:$('comment').value};await withSave(e.submitter,async()=>{await addOp('rating',a.id,data);toast('Il tuo contributo è salvato');});};
@@ -314,7 +357,7 @@ async function addOp(kind,activity,data,opAuthor=author){
  try{await mergeOperations([op]);render();if(channel?.readyState==='open'&&peerPerson&&syncStarted)send({type:'op',op}).catch(()=>toast('Trasferimento interrotto: il contenuto resta qui'));}catch(e){throw Error('Salvataggio non riuscito. Controlla lo spazio disponibile.');}
 }
 function validateOp(op){return DiaryModel.validateOp(op);}
-function connection(status,online=false){$('connection').textContent=status;$('dot').classList.toggle('online',online);$('pairStatus').textContent=status;}
+function connection(status,online=false){$('connection').textContent=status;$('dot').classList.toggle('online',online);$('pairStatus').textContent=status;updatePartnerStatus();}
 function closePeer(){peerPerson='';syncStarted=false;clearTimeout(channel?.helloTimer);clearInterval(pollTimer);clearInterval(diagnosticTimer);pollTimer=null;const oldChannel=channel,oldPeer=pc;pc=null;channel=null;pairId=null;peerName='';$('pairCode').textContent='';if(oldChannel){oldChannel.onopen=null;oldChannel.onclose=null;oldChannel.onmessage=null;oldChannel.close();}if(oldPeer){oldPeer.ondatachannel=null;oldPeer.onconnectionstatechange=null;oldPeer.oniceconnectionstatechange=null;oldPeer.close();}transfers.clear();connection('Diario locale · non collegato');}
 function reportDiagnostic(stage){
  const node=$('connectionDebug');if(!node)return;
@@ -322,7 +365,7 @@ function reportDiagnostic(stage){
  node.textContent=['Ultimo passaggio: '+stage,'Connessione: '+(pc?.connectionState||'non avviata'),'Rete: '+(pc?.iceConnectionState||'non avviata'),'Raccolta rete: '+(pc?.iceGatheringState||'non avviata'),'Percorsi locali: '+count(pc?.localDescription?.sdp),'Percorsi ricevuti: '+count(pc?.remoteDescription?.sdp),'Canale: '+(channel?.readyState||'non aperto')].join('\n');
 }
 function reportStats(){reportDiagnostic('controllo locale');}
-function makePeer(){closePeer();if(!window.RTCPeerConnection)throw Error('Questo browser non supporta il collegamento. Usa Safari aggiornato.');const created=new RTCPeerConnection({iceServers:localIceServers});pc=created;created.ondatachannel=e=>{if(pc===created)bindChannel(e.channel);};created.onconnectionstatechange=()=>{if(pc!==created)return;reportDiagnostic('connection');if(created.connectionState==='failed')connection('Connessione diretta non riuscita · i ricordi restano qui');else if(created.connectionState==='disconnected')connection('Connessione in pausa · tentativo di ripresa…');};created.oniceconnectionstatechange=()=>{if(pc===created)reportDiagnostic('ice');};created.onicecandidateerror=e=>{if(pc===created)reportDiagnostic('candidate-error',{code:e.errorCode,message:e.errorText});};diagnosticTimer=setInterval(reportStats,5000);reportDiagnostic('start');return created;}
+function makePeer(){closePeer();if(!window.RTCPeerConnection)throw Error('Questo browser non supporta il collegamento. Usa Safari aggiornato.');const created=new RTCPeerConnection({iceServers:localIceServers});pc=created;created.ondatachannel=e=>{if(pc===created)bindChannel(e.channel);};created.onconnectionstatechange=()=>{if(pc!==created)return;reportDiagnostic('connection');updatePartnerStatus();if(created.connectionState==='failed')connection('Connessione diretta non riuscita · i ricordi restano qui');else if(created.connectionState==='disconnected')connection('Connessione in pausa · tentativo di ripresa…');};created.oniceconnectionstatechange=()=>{if(pc===created)reportDiagnostic('ice');};created.onicecandidateerror=e=>{if(pc===created)reportDiagnostic('candidate-error',{code:e.errorCode,message:e.errorText});};diagnosticTimer=setInterval(reportStats,5000);reportDiagnostic('start');return created;}
 function bindChannel(c){
  channel=c;peerPerson='';syncStarted=false;c.bufferedAmountLowThreshold=65536;
  c.onopen=async()=>{if(channel!==c)return;reportDiagnostic('channel-open');clearInterval(pollTimer);connection('Verifica dei due profili…',true);try{await send({type:'hello',protocol:WIRE_VERSION,person:author,name:personName(),ticket:sessionTicket,policy:accessPolicy});c.helloTimer=setTimeout(()=>{if(channel===c&&!peerPerson){closePeer();connection('Aggiorna il diario su entrambi i dispositivi e riprova');}},10000);}catch{connection('Trasferimento interrotto');}};
@@ -330,7 +373,7 @@ function bindChannel(c){
  let receive=Promise.resolve();c.onmessage=e=>{receive=receive.then(()=>{if(channel===c)return receiveFrame(e.data);}).catch(err=>toast('Ricezione non completata: '+err.message));};
 }
 async function syncSnapshot(){
- if(syncStarted||!peerPerson)return;syncStarted=true;
+ if(syncStarted||!peerPerson)return;syncStarted=true;updatePartnerStatus();
  for(const op of ops)await send({type:'op',op});
  await send({type:'sync-done'});
 }
@@ -405,22 +448,22 @@ $('scanCode').onclick=guarded(async()=>{
 
 let profileBaseline=null,partnerPhotoDraft='';
 function openProfile(){
- $('themeSelect').value=DiaryPreferences.theme;
+ $('themeSelect').value=DiaryPreferences.theme;updateProfileMenu();
  const profile=state.profiles[author];profileDraft=profile?.photo||'';
- $('firstNameInput').value=profile?.firstName||(myName==='Io'?'':myName);$('lastNameInput').value=profile?.lastName||'';
+ $('firstNameInput').value=profile?.firstName||(myName==='Io'?'':myName);$('lastNameInput').value=profile?.lastName||'';$('nicknameInput').value=profile?.nickname||'';
  $('profilePreview').innerHTML='<span class="avatar">'+avatar(profile)+'</span>';
  const partner=state.profiles[author==='one'?'two':'one'];partnerPhotoDraft=partner?.photo||'';
  $('partnerProfile').innerHTML='<span class="avatar">'+avatar(partner,icon('heart'))+'</span><div><p>'+esc(partner?[partner.firstName,partner.lastName].filter(Boolean).join(' '):'Il suo angolino')+'</p><small>'+(partner?'Il profilo dell’altro diario':'Nome e foto da preparare per la sorpresa')+'</small></div>';
- $('partnerFirstName').value=partner?.firstName||'';$('partnerLastName').value=partner?.lastName||'';
- profileBaseline={own:{firstName:$('firstNameInput').value,lastName:$('lastNameInput').value,photo:profileDraft},partner:{firstName:$('partnerFirstName').value,lastName:$('partnerLastName').value,photo:partnerPhotoDraft}};
+ $('partnerNickname').value=partner?.nickname||'';$('partnerFirstName').value=partner?.firstName||'';$('partnerLastName').value=partner?.lastName||'';
+ profileBaseline={own:{firstName:$('firstNameInput').value,lastName:$('lastNameInput').value,photo:profileDraft,nickname:$('nicknameInput').value},partner:{firstName:$('partnerFirstName').value,lastName:$('partnerLastName').value,photo:partnerPhotoDraft,nickname:$('partnerNickname').value}};
  $('otherDeviceHelp').textContent='Puoi preparare entrambi i nomi da qui. Sull’altro iPhone scegli '+(author==='one'?'Persona 2':'Persona 1')+': al primo collegamento riceverà i profili che avete preparato. I nomi non sono pubblicati sul sito.';
- $('anniversaryInput').value=state.settings.anniversaryStart?.date||state.settings.anniversary||'';$('anniversaryTime').value=state.settings.anniversaryStart?.time||'00:00';renderLegacyProfiles();updateInstallUI();updateAdministrationUI();$('profileDialog').showModal();
+ $('anniversaryInput').value=state.settings.anniversaryStart?.date||state.settings.anniversary||'';$('anniversaryTime').value=state.settings.anniversaryStart?.time||'00:00';renderLegacyProfiles();updateInstallUI();updateAdministrationUI();if(!$('profileDialog').open)$('profileDialog').showModal();
 }
-$('profileButton').onclick=openProfile;$('installNotice').onclick=openProfile;
+$('profileButton').onclick=()=>{openProfile();showProfileSection('home');};
 $('partnerPhoto').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;await withSave(e.target,async()=>{if(author!=='one'||!adminKey)throw Error('Sblocca l’amministrazione');if(f.size>20*1024*1024)throw Error('Scegli una foto sotto i 20 MB');partnerPhotoDraft=await mediaURL(f,600);$('partnerProfile').querySelector('.avatar').innerHTML='<img src="'+esc(partnerPhotoDraft)+'" alt="Nuova foto dell’altra persona">';});};
 $('accessDialog').addEventListener('close',()=>{$('accessPassword').value='';$('accessPasswordAgain').value='';});
 $('profilePhoto').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;await withSave(e.target,async()=>{if(f.size>20*1024*1024)throw Error('Scegli una foto sotto i 20 MB');profileDraft=await mediaURL(f,600);$('profilePreview').innerHTML='<span class="avatar"><img src="'+esc(profileDraft)+'" alt="La tua nuova foto"></span>';});};
-$('profileForm').onsubmit=async e=>{e.preventDefault();await withSave(e.submitter,async()=>{const draft={own:{firstName:$('firstNameInput').value,lastName:$('lastNameInput').value,photo:profileDraft},partner:{firstName:$('partnerFirstName').value,lastName:$('partnerLastName').value,photo:partnerPhotoDraft}};const changes=DiaryModel.profileChanges(state.profiles,author,profileBaseline,draft,author==='one'&&!!adminKey);if(changes.some(change=>change.person!==author)&&!(author==='one'&&adminKey))throw Error('Soltanto l’amministratore può modificare l’altro profilo');for(const change of changes)await addOp('profile',change.person,change.data,change.person);myName=personName();$('profileDialog').close();toast(changes.length?'Profili salvati soltanto nel diario':'I profili sono già aggiornati');});};
+$('profileForm').onsubmit=async e=>{e.preventDefault();await withSave(e.submitter,async()=>{const draft={own:{firstName:$('firstNameInput').value,lastName:$('lastNameInput').value,photo:profileDraft,nickname:$('nicknameInput').value},partner:{firstName:$('partnerFirstName').value,lastName:$('partnerLastName').value,photo:partnerPhotoDraft,nickname:$('partnerNickname').value}};const changes=DiaryModel.profileChanges(state.profiles,author,profileBaseline,draft,author==='one'&&!!adminKey);if(changes.some(change=>change.person!==author)&&!(author==='one'&&adminKey))throw Error('Soltanto l’amministratore può modificare l’altro profilo');for(const change of changes)await addOp('profile',change.person,change.data,change.person);myName=personName();openProfile();showProfileSection('home');toast(changes.length?'Profili salvati soltanto nel diario':'I profili sono già aggiornati');});};
 $('saveAnniversary').onclick=async()=>{
  const date=$('anniversaryInput').value,time=$('anniversaryTime').value;
  if(!date||!time)return toast('Scegli la data e l’orario del vostro inizio');
@@ -428,13 +471,15 @@ $('saveAnniversary').onclick=async()=>{
 };
 $('coverInput').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;await withSave(e.target,async()=>{if(f.size>20*1024*1024)throw Error('Scegli una foto sotto i 20 MB');const value=await mediaURL(f,2048);await addOp('setting','our-story',{key:'cover',value});toast('Adesso questa Home parla di voi');});};
 function openLetter(id){
+ activeLetterId=id||null;
  const l=state.letters.find(l=>l.id===id);
  $('letterContent').innerHTML=l?'<p class="letter-date">'+new Date(l.time).toLocaleDateString('it-IT',{day:'numeric',month:'long',year:'numeric'})+'</p><h2>'+esc(l.title)+'</h2><div class="letter-body">'+esc(l.body)+'</div><p class="letter-signature">'+esc(nameOf(l.author,l.name))+'</p><p class="field-help">'+(pending(l.id)?'La lettera arriverà nell’altro diario quando vi collegherete.':'La lettera è stata ricevuta anche dall’altro diario.')+'</p>':'<h2>Una lettera per te.</h2><p class="muted">Scrivi quello che ti va di lasciare all’altro. Lo ritroverete qui, anche fra tanto tempo.</p><form id="letterForm"><label>Titolo<input id="letterTitle" required maxlength="120" placeholder="Una cosa che volevo dirti…"></label><label>Le tue parole<textarea id="letterBody" required maxlength="20000" rows="9" placeholder="Caro amore,"></textarea></label><p class="field-help">Si salva qui. Arriverà anche nell’altro diario al prossimo collegamento.</p><button class="primary" type="submit">Lascia la tua lettera</button></form>';
+ if(l&&l.author===author){$('letterContent').insertAdjacentHTML('beforeend','<button class="text-button danger-button" id="deleteLetter">Elimina la mia lettera</button>');$('deleteLetter').onclick=()=>confirmRemoval('Eliminare questa lettera?','La lettera verrà eliminata anche dall’altro diario al prossimo collegamento. I backup già esportati restano invariati.',async()=>{await addOp('delete-letter',l.id,{});$('letterDialog').close();});}
  if(!l)$('letterForm').onsubmit=async e=>{e.preventDefault();const title=$('letterTitle').value.trim(),body=$('letterBody').value.trim();if(!title||!body)return;await withSave(e.submitter,async()=>{await addOp('letter',uuid(),{title,body});$('letterDialog').close();navigate('lettere');toast('Le tue parole sono al sicuro qui');});};
  $('letterDialog').showModal();
 }
 function openGameBuilder(type){
- gameDraft={type,title:'',questions:[{text:'',options:['','','',''],correct:0}]};renderGameBuilder();$('gameDialog').showModal();
+ playSession=null;gameDraft={type,title:'',questions:[{text:'',options:['','','',''],correct:0}]};renderGameBuilder();$('gameDialog').showModal();
 }
 function captureGameDraft(){
  gameDraft.title=$('gameTitle').value;
@@ -447,23 +492,24 @@ function renderGameBuilder(){
  if($('removeQuestion'))$('removeQuestion').onclick=()=>{captureGameDraft();gameDraft.questions.pop();renderGameBuilder();};
  $('gameForm').onsubmit=async e=>{e.preventDefault();captureGameDraft();await withSave(e.submitter,async()=>{await addOp('game',uuid(),{title:gameDraft.title.trim(),type:gameDraft.type,questions:gameDraft.questions.map(q=>gameDraft.type==='quiz'?{text:q.text.trim(),options:q.options.map(v=>v.trim()),correct:q.correct}:{text:q.text.trim()})});$('gameDialog').close();navigate('giochi');toast('Il vostro gioco è pronto');});};
 }
-function startGame(id){const g=state.games.find(g=>g.id===id);if(!g)return;playSession={game:g,index:0,score:0,chosen:null,revealed:false,saved:false};renderGamePlay();$('gameDialog').showModal();}
+function startGame(id){const g=state.games.find(g=>g.id===id);if(!g)return;gameDraft=null;playSession={game:g,index:0,score:0,chosen:null,revealed:false,saved:false};renderGamePlay();$('gameDialog').showModal();}
 function renderGamePlay(){
- const p=playSession,g=p.game;
+ const p=playSession;if(!p)return;const g=p.game;
  if(p.index>=g.questions.length){
-  $('gameContent').innerHTML='<p class="eyebrow">'+esc(g.title)+'</p><h2>'+(g.type==='quiz'?'Ecco quanto ci conosciamo.':'Un po’ più vicini.')+'</h2>'+(g.type==='quiz'?'<div class="result-score">'+p.score+'<small> / '+g.questions.length+'</small></div><p class="game-note">Il risultato è stato salvato nel tuo diario.</p>':'<p class="muted">Le risposte restano nella vostra conversazione. Le domande vi aspettano qui, per un’altra volta.</p>')+'<button class="primary" id="finishGame">Torna ai nostri giochi</button>';
+  $('gameContent').innerHTML='<p class="eyebrow">'+esc(g.title)+'</p><h2>'+(g.type==='quiz'?'Ecco quanto ci conosciamo.':'Un po’ più vicini.')+'</h2>'+(g.type==='quiz'?'<div class="result-score">'+p.score+'<small> / '+g.questions.length+'</small></div><p class="game-note">Risultato salvato per '+esc(displayName(author))+'.</p>':'<p class="muted">Le risposte restano nella vostra conversazione. Le domande vi aspettano qui, per un’altra volta.</p>')+'<button class="primary" id="finishGame">Torna ai nostri giochi</button>';
   $('finishGame').onclick=()=>$('gameDialog').close();return;
  }
  const q=g.questions[p.index],quiz=g.type==='quiz';
- $('gameContent').innerHTML='<p class="eyebrow">'+esc(g.title)+'</p><div class="game-progress"><span id="gameProgress"></span></div><p class="field-help">Domanda '+(p.index+1)+' di '+g.questions.length+'</p><h2 class="game-question">'+esc(q.text)+'</h2>'+((quiz||g.type==='truefalse')?'<div class="answer-options">'+(quiz?q.options:['Vero','Falso']).map((option,i)=>'<button class="answer-option'+(p.chosen===i?' selected':'')+(quiz&&p.revealed&&q.correct===i?' correct':'')+(quiz&&p.revealed&&p.chosen===i&&i!==q.correct?' wrong':'')+'" data-answer="'+i+'" '+(p.revealed?'disabled':'')+'><span>'+String.fromCharCode(65+i)+'</span>'+esc(option)+'</button>').join('')+'</div>':'<p class="muted">'+(g.type==='truthdare'?'Scegliete insieme se raccontarvi una verità o mettervi alla prova.':'Prendetevi il tempo di parlarne insieme.')+'</p>')+(quiz&&p.revealed?'<p class="notice">'+(p.chosen===q.correct?'Esatto!':'La risposta corretta è: '+esc(q.options[q.correct]))+'</p>':'')+'<button class="primary" id="nextQuestion" '+((quiz||g.type==='truefalse')&&p.chosen===null?'disabled':'')+'>'+(quiz&&!p.revealed?'Conferma risposta':p.index===g.questions.length-1?'Concludi':'Prossima domanda')+'</button>';
+ $('gameContent').innerHTML='<p class="eyebrow">'+esc(g.title)+'</p><p class="playing-as">Sta giocando '+esc(displayName(author))+'</p><div class="game-progress"><span id="gameProgress"></span></div><p class="field-help">Domanda '+(p.index+1)+' di '+g.questions.length+'</p><h2 class="game-question">'+esc(q.text)+'</h2>'+((quiz||g.type==='truefalse')?'<div class="answer-options">'+(quiz?q.options:['Vero','Falso']).map((option,i)=>'<button class="answer-option'+(p.chosen===i?' selected':'')+(quiz&&p.revealed&&q.correct===i?' correct':'')+(quiz&&p.revealed&&p.chosen===i&&i!==q.correct?' wrong':'')+'" data-answer="'+i+'" '+(p.revealed?'disabled':'')+'><span>'+String.fromCharCode(65+i)+'</span>'+esc(option)+'</button>').join('')+'</div>':'<p class="muted">'+(g.type==='truthdare'?'Scegliete insieme se raccontarvi una verità o mettervi alla prova.':'Prendetevi il tempo di parlarne insieme.')+'</p>')+(quiz&&p.revealed?'<p class="notice">'+(p.chosen===q.correct?'Esatto!':'La risposta corretta è: '+esc(q.options[q.correct]))+'</p>':'')+'<button class="primary" id="nextQuestion" '+((quiz||g.type==='truefalse')&&p.chosen===null?'disabled':'')+'>'+(quiz&&!p.revealed?'Conferma risposta':p.index===g.questions.length-1?'Concludi':'Prossima domanda')+'</button>';
  $('gameProgress').style.width=((p.index+1)/g.questions.length*100)+'%';
  document.querySelectorAll('[data-answer]').forEach(b=>b.onclick=()=>{p.chosen=Number(b.dataset.answer);renderGamePlay();});
  $('nextQuestion').onclick=async e=>{if(quiz&&!p.revealed){p.revealed=true;if(p.chosen===q.correct)p.score++;renderGamePlay();return;}
-  await withSave(e.currentTarget,async()=>{if(quiz&&p.index===g.questions.length-1&&!p.saved){await addOp('game-result',g.id,{score:p.score,total:g.questions.length});p.saved=true;}p.index++;p.chosen=null;p.revealed=false;renderGamePlay();});
+  await withSave(e.currentTarget,async()=>{if(!state.games.some(item=>item.id===g.id))throw Error('Questo gioco è stato eliminato');if(p.index===g.questions.length-1&&!p.saved){await addOp(quiz?'game-result':'game-played',g.id,quiz?{score:p.score,total:g.questions.length}:{total:g.questions.length});p.saved=true;}p.index++;p.chosen=null;p.revealed=false;renderGamePlay();});
  };
 }
 document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>b.closest('dialog').close());
 $('detailDialog').addEventListener('close',()=>{active=null;renderedActivity=null;});
+$('letterDialog').addEventListener('close',()=>{activeLetterId=null;$('letterContent').replaceChildren();});
 $('linkIcon').innerHTML=icon('link');$('uploadIcon').innerHTML=icon('camera');
 function completeBackup(){
  if(!accessPolicy||author!=='one'||!adminKey||!adminVault)throw Error('Configura e sblocca l’amministrazione per creare il backup completo');
@@ -525,7 +571,7 @@ function updateInstallUI(){
  const offline=DiaryOffline.status,p=people[author],installed=DiaryOffline.isInstalled(),label=p?personName():'Profilo da scegliere';
  $('offlineStatus').textContent=offline.message;
  $('offlineStatus').dataset.ready=String(offline.ready);
- $('offlineSummary').textContent=offline.ready?(installed?'Disponibile offline':'Copia locale pronta'):offline.phase==='insecure'?'Installazione da completare':'Preparazione offline';
+ updatePartnerStatus();
  $('deviceOwner').textContent=label+(accessPolicy?(author==='one'?' · Amministratore':' · Utente'):'');
  $('installExplanation').textContent=profileMismatch?'Questo diario appartiene a '+label+'. Il link dell’altro profilo non cambia l’identità già assegnata.':installed?'Questa è l’app sulla Home. Puoi consultare ciò che è già salvato anche senza Mac e senza rete.':'Per installarlo sull’iPhone, aggiungilo alla schermata Home, aprilo dall’icona con Internet disponibile e attendi “Pronto offline su questo iPhone”.';
  $('retryOffline').hidden=offline.ready;$('reloadDiary').hidden=offline.phase!=='error';
@@ -556,11 +602,14 @@ function updateAdministrationUI(){
  $('unlockAdministration').hidden=!configured||!ownAdmin||unlocked||!adminVault;
  $('lockAdministration').hidden=!unlocked;
  $('recoverAdminNote').hidden=!configured||!ownAdmin||!!adminVault;
- $('partnerPhotoLabel').hidden=!unlocked;
+ $('partnerPhotoLabel').hidden=!unlocked;$('partnerFields').hidden=!unlocked;$('removePartnerPhoto').hidden=!unlocked||!partnerPhotoDraft;
+ $('removeProfilePhoto').hidden=ownLockedPhoto();
+ $('profileAdminRow').hidden=!ownAdmin;
+ function ownLockedPhoto(){return !profileDraft||(ownAdmin&&configured&&!unlocked);}
  $('changePerson').disabled=configured;
- const ownLocked=ownAdmin&&configured&&!unlocked;
- for(const id of ['firstNameInput','lastNameInput','profilePhoto'])$(id).disabled=ownLocked;
- for(const id of ['partnerFirstName','partnerLastName'])$(id).disabled=!unlocked;
+ const ownLocked=ownAdmin&&configured&&!unlocked;$('profileEditHint').hidden=!ownLocked;
+ for(const id of ['firstNameInput','lastNameInput','nicknameInput','profilePhoto'])$(id).disabled=ownLocked;
+ for(const id of ['partnerFirstName','partnerLastName','partnerNickname'])$(id).disabled=!unlocked;
  $('otherDeviceHelp').textContent=unlocked?'Puoi modificare entrambi i nomi. I profili saranno trasferiti al collegamento successivo e non vengono pubblicati sul sito.':'Puoi modificare soltanto il tuo profilo. Il telefono dell’altra persona mantiene i propri dati e permessi.';
  $('export').hidden=!unlocked;$('shareBackup').hidden=!unlocked;
  $('backupHelp').textContent='Il backup completo comprende i contributi di entrambi presenti su questo iPhone e la chiave amministratore protetta dalla password. Sincronizza prima i diari, poi salva il file sul Mac. I contenuti del backup sono leggibili: conservalo come le tue foto private. Il Mac non deve restare collegato.';
