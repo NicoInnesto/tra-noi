@@ -70,7 +70,14 @@ dialog{max-height:calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-b
 @media(prefers-reduced-motion:reduce){.nav-bubble,.bottom-nav a{transition:none}.nav-dragging a.nav-preview{transform:none}}
 
 #viewportProbe{position:fixed;left:0;top:0;width:0;height:100vh;height:100lvh;visibility:hidden;pointer-events:none;--screen-top:env(safe-area-inset-top,0px);--screen-bottom:env(safe-area-inset-bottom,0px)}#screenMeasurements{font:12px/1.7 ui-monospace,monospace;min-height:260px;resize:none}
-.viewport-refresh{position:fixed;top:50%;left:50%;width:1px;height:1px;padding:0;border:0;opacity:0;pointer-events:none;font-size:16px}
+/* The installed iOS viewport can start shorter than its large viewport.
+   Anchor the canvas and navigation to the same full-height containing block. */
+@supports(height:100lvh){
+ html.ios-home-screen{height:100lvh;overflow:hidden}
+ .ios-home-screen body{position:relative;height:100lvh;overflow:hidden}
+ .ios-home-screen .app-shell{height:100%}
+ .ios-home-screen .bottom-nav{position:absolute}
+}
 
 .collection-card.tone-experiences{--tile-accent:#cbb4f0;background:linear-gradient(125deg,#3e3054,#2b213c)}
 .collection-card.tone-dance{--tile-accent:#efbad4;background:linear-gradient(125deg,#4b2d43,#342238)}

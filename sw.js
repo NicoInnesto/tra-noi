@@ -1,6 +1,6 @@
 'use strict';
-const VERSION=24,BASE=new URL('./',self.location.href),CACHE='tra-noi-pages-'+BASE.pathname+'-v24';
-const relative=['index.html?v=24','style.css?v=24','boot.js?v=24','model.js?v=24','offline.js?v=24','link.js?v=24','interaction.js?v=24','access.js?v=24','viewport.js?v=24','app.js?v=24','manifest.json','manifest-one.json','manifest-two.json','icon.svg?v=24','icon-192.png?v=24','icon-512.png?v=24','apple-touch-icon.png?v=24','vendor/qrcode.js','vendor/jsqr.js','installazione.html'];
+const VERSION=25,BASE=new URL('./',self.location.href),CACHE='tra-noi-pages-'+BASE.pathname+'-v25';
+const relative=['index.html?v=25','style.css?v=25','boot.js?v=25','model.js?v=25','offline.js?v=25','link.js?v=25','interaction.js?v=25','access.js?v=25','viewport.js?v=25','app.js?v=25','manifest.json','manifest-one.json','manifest-two.json','icon.svg?v=25','icon-192.png?v=25','icon-512.png?v=25','apple-touch-icon.png?v=25','vendor/qrcode.js','vendor/jsqr.js','installazione.html'];
 const ASSETS=relative.map(p=>new URL(p,BASE).href),SHELL=ASSETS[0];
 self.addEventListener('install',e=>e.waitUntil((async()=>{const cache=await caches.open(CACHE);await cache.addAll(ASSETS);await self.skipWaiting();})()));
 self.addEventListener('activate',e=>e.waitUntil((async()=>{for(const key of await caches.keys())if(key!==CACHE&&key.startsWith('tra-noi-pages-'+BASE.pathname+'-v'))await caches.delete(key);await self.clients.claim();})()));

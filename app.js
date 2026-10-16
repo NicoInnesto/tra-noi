@@ -1,6 +1,6 @@
 'use strict';
 window.diaryBoot=window.diaryBoot||{phase:'Caricamento del diario',ready:false};
-const VERSION=24;
+const VERSION=25;
 const WIRE_VERSION=22;
 const uuid=()=>crypto.randomUUID?crypto.randomUUID():([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g,c=>(c^crypto.getRandomValues(new Uint8Array(1))[0]&15>>c/4).toString(16));
 const $=id=>document.getElementById(id);
@@ -546,6 +546,7 @@ function measureScreen(){
  'Schermo: '+screen.width+' × '+screen.height,
  'Finestra: '+innerWidth+' × '+innerHeight,
  'Documento: '+document.documentElement.clientHeight,
+ 'Corpo pagina: '+round(document.body.getBoundingClientRect().height),
  'Vista visibile: '+round(window.visualViewport?.height)+' / inizio '+round(window.visualViewport?.offsetTop),
  'Area superiore: '+probe.getPropertyValue('--screen-top').trim(),
  'Area inferiore: '+probe.getPropertyValue('--screen-bottom').trim(),
