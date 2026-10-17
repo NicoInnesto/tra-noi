@@ -1,7 +1,7 @@
 'use strict';
-// Release 1.0 (build 43): change the administrator password without changing identity or permissions.
-const VERSION=43,BASE=new URL('./',self.location.href),CACHE='tra-noi-pages-'+BASE.pathname+'-v43';
-const relative=['index.html?v=43','style.css?v=43','boot.js?v=43','model.js?v=43','offline.js?v=43','link.js?v=43','interaction.js?v=43','access.js?v=43','preferences.js?v=43','viewport.js?v=43','app.js?v=43','backup.js?v=43','manifest.json','manifest-one.json','manifest-two.json','icon.svg?v=43','icon-192.png?v=43','icon-512.png?v=43','apple-touch-icon.png?v=43','vendor/qrcode.js','vendor/jsqr.js','installazione.html','nuova-icona.html','manifest-icon.json'];
+// Release 1.0 (build 44): simplify visible version and align settings actions.
+const VERSION=44,BASE=new URL('./',self.location.href),CACHE='tra-noi-pages-'+BASE.pathname+'-v44';
+const relative=['index.html?v=44','style.css?v=44','boot.js?v=44','model.js?v=44','offline.js?v=44','link.js?v=44','interaction.js?v=44','access.js?v=44','preferences.js?v=44','viewport.js?v=44','app.js?v=44','backup.js?v=44','manifest.json','manifest-one.json','manifest-two.json','icon.svg?v=44','icon-192.png?v=44','icon-512.png?v=44','apple-touch-icon.png?v=44','vendor/qrcode.js','vendor/jsqr.js','installazione.html','nuova-icona.html','manifest-icon.json'];
 const ASSETS=relative.map(p=>new URL(p,BASE).href),SHELL=ASSETS[0];
 self.addEventListener('install',e=>e.waitUntil((async()=>{const cache=await caches.open(CACHE);await cache.addAll(ASSETS);await self.skipWaiting();})()));
 self.addEventListener('activate',e=>e.waitUntil((async()=>{for(const key of await caches.keys())if(key!==CACHE&&key.startsWith('tra-noi-pages-'+BASE.pathname+'-v'))await caches.delete(key);await self.clients.claim();})()));

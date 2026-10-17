@@ -253,3 +253,8 @@ body.guide-body{height:auto;min-height:100svh;overflow:auto}.guide-page{max-widt
 /* Keep the title in place and lower only the profile and status slightly. */
 .app-header>.world-brand{position:relative;top:4px}
 .app-header>.header-actions{position:relative;top:8px}
+
+/* Keep administration and backup actions evenly spaced on every screen. */
+[data-profile-panel=admin] .button-row{flex-direction:column;align-items:flex-start;gap:10px}
+[data-profile-panel=backup] .button-row{display:grid;grid-template-columns:minmax(0,1fr);gap:10px}
+[data-profile-panel=backup] .button-row>button{width:100%;margin:0}

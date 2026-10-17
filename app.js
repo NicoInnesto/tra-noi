@@ -1,6 +1,6 @@
 'use strict';
 window.diaryBoot=window.diaryBoot||{phase:'Caricamento del diario',ready:false};
-const VERSION=43;
+const VERSION=44;
 const RELEASE='1.0';
 const WIRE_VERSION=39;
 const uuid=()=>crypto.randomUUID?crypto.randomUUID():([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g,c=>(c^crypto.getRandomValues(new Uint8Array(1))[0]&15>>c/4).toString(16));
@@ -78,7 +78,7 @@ function updateProfileMenu(){
  if(!state)return;
  $('profileSummary').innerHTML='<span class="avatar">'+avatar(state.profiles[author])+'</span><h3>'+esc(personName())+'</h3>';
  if(!$('profileMenu').children.length)$('profileMenu').innerHTML=Object.entries(profileSections).map(([key,[ic,title,detail]])=>'<button class="settings-row" data-profile-section="'+key+'" '+(key==='admin'?'id="profileAdminRow"':'')+'><span class="settings-row-icon">'+icon(ic)+'</span><span><strong>'+title+'</strong><small>'+detail+'</small></span>'+icon('right','settings-chevron')+'</button>').join('');
- updateCoverSettings();$('profileAdminRow').hidden=author!=='one';$('appVersion').textContent=RELEASE+' · build '+VERSION;
+ updateCoverSettings();$('profileAdminRow').hidden=author!=='one';$('appVersion').textContent=RELEASE;
 }
 function showProfileSection(section){
  if(section!=='home'&&!Object.hasOwn(profileSections,section)||section==='admin'&&author!=='one')return;
@@ -672,7 +672,7 @@ $('reloadDiary').onclick=()=>location.reload();
 $('themeSelect').onchange=e=>{DiaryPreferences.setTheme(e.target.value);toast('Aspetto aggiornato su questo dispositivo');};
 $('forceUpdate').onclick=async e=>withSave(e.currentTarget,async()=>{
  const status=$('updateStatus');status.textContent='Controllo della versione e della copia offline…';
- try{const result=await DiaryOffline.update();if(result.version>VERSION){status.textContent='Aggiornamento pronto. Riapertura del diario…';location.reload();}else{status.textContent='La versione '+VERSION+' è già aggiornata e pronta offline. L’icona installata è gestita da iOS.';toast('Il diario è già aggiornato');}}
+ try{const result=await DiaryOffline.update();if(result.version>VERSION){status.textContent='Aggiornamento pronto. Riapertura del diario…';location.reload();}else{status.textContent='La versione '+RELEASE+' è già aggiornata e pronta offline. L’icona installata è gestita da iOS.';toast('Il diario è già aggiornato');}}
  catch(error){status.textContent=error.message;throw error;}
 });
 $('changePerson').onclick=()=>{$('profileDialog').close();openIdentityPicker();};
