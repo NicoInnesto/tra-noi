@@ -250,5 +250,6 @@ body.guide-body{height:auto;min-height:100svh;overflow:auto}.guide-page{max-widt
 .goals-page .goal-section>.goal-list{padding:0 10px 10px}
 .goals-page .goal-section>.goal-list:empty{padding:0}
 .goals-page .goal-archive .goal-section{background:var(--bg)}
-/* Move the whole header down together by only four pixels. */
-.app-header>.world-brand,.app-header>.header-actions{position:relative;top:4px}
+/* Keep the title in place and lower only the profile and status slightly. */
+.app-header>.world-brand{position:relative;top:4px}
+.app-header>.header-actions{position:relative;top:8px}
