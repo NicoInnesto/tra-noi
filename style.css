@@ -220,3 +220,20 @@ body.guide-body{height:auto;min-height:100svh;overflow:auto}.guide-page{max-widt
 #profileDialog>#profileHome,#profileDialog>.profile-panel{overflow-y:auto;min-height:0;overscroll-behavior:contain}
 #profileDialog::backdrop{backdrop-filter:none;-webkit-backdrop-filter:none;background:#0e0713bf}
 .goals-page>.back-link{margin-bottom:0;padding-top:2px;padding-bottom:4px;min-height:26px}
+
+/* Full-image covers in a consistent frame, with softly filled margins. */
+.memory-card{display:flex;flex-direction:column;justify-content:flex-start;align-items:stretch}
+.memory-cover{height:auto;aspect-ratio:4/5;flex:0 0 auto;width:100%;isolation:isolate}
+.memory-cover>img{position:absolute;inset:0;width:100%;height:100%;margin:0}
+.memory-cover>.memory-cover-backdrop{object-fit:cover;filter:blur(14px);transform:scale(1.15);opacity:.35;z-index:-1}
+.memory-cover>.memory-cover-image{object-fit:contain;object-position:center;z-index:0}
+.day-summary .memory-cover{aspect-ratio:auto;height:100%;width:95px}
+.memory-title-row{display:flex;align-items:flex-start;gap:12px;margin-bottom:17px}
+.memory-title-row h2{flex:1;min-width:0;margin-bottom:0}
+.memory-title-edit{width:32px;height:32px;flex:0 0 32px;margin-top:2px;color:var(--muted);background:transparent}
+.memory-title-edit svg{width:16px;height:16px}
+.memory-footer{row-gap:8px}
+.memory-footer .delete-memory-section{margin-top:0;padding-top:7px}
+.goals-page .goal-action svg{display:block;overflow:visible}
+.goals-page .goal-action[data-goal-edit] svg{transform:translateY(1px)}
+.goals-page .goal-actions{align-items:center}

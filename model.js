@@ -14,7 +14,7 @@ function aliases(ops){
 }
 function resolveAuthor(id,ops){return aliases(ops)[id]||id;}
 function compactOps(ops){
- const deleted=new Set(ops.filter(o=>o.kind==='delete-memory').map(o=>o.activity)),deletedEvents=new Set(ops.filter(o=>o.kind==='delete-countdown').map(o=>o.activity)),deletedGoals=new Set(ops.filter(o=>o.kind==='delete-goal').map(o=>o.activity)),seen=new Set(),content=new Set(['create','rating','clear-rating','media','media-state','delete-media','memory-location']);
+ const deleted=new Set(ops.filter(o=>o.kind==='delete-memory').map(o=>o.activity)),deletedEvents=new Set(ops.filter(o=>o.kind==='delete-countdown').map(o=>o.activity)),deletedGoals=new Set(ops.filter(o=>o.kind==='delete-goal').map(o=>o.activity)),seen=new Set(),content=new Set(['create','rating','clear-rating','media','media-state','delete-media','memory-location','memory-title']);
  const identity=aliases(ops),who=o=>identity[o.author]||o.author,key=o=>JSON.stringify([o.activity,who(o)]),games=new Set(),letters=new Set(),media=new Set(),ratings=new Map(),results=new Map(),categories=new Map();
  for(const o of ordered(ops)){
   if(o.kind==='delete-game')games.add(JSON.stringify([o.activity,who(o)]));
@@ -65,6 +65,7 @@ function project(ops){
    if(a.section==='experiences')categories.add(a.category);
   }
   const a=memories.get(op.activity);if(!a)continue;
+  if(op.kind==='memory-title')a.title=op.data.title;
   if(op.kind==='memory-location')a.location=op.data.location;
   if(op.kind==='rating')a.ratings[op.author]={...op.data,name:op.name};
   if(op.kind==='media'&&!a.media.some(m=>m.id===op.id))a.media.push({id:op.id,...op.data});
@@ -81,6 +82,7 @@ function validateOp(o){
  const d=o.data;let ok=false;
  if(o.kind==='create')ok=text(d.title,120)&&!!d.title.trim()&&text(d.category,60)&&!!d.category.trim()&&validDate(d.date)&&(!d.section||Object.hasOwn(sections,d.section))&&(!d.endDate||validDate(d.endDate)&&!!d.date&&d.endDate>=d.date)&&(!d.description||text(d.description,5000))&&(!d.location||text(d.location,160))&&(!d.recipient||text(d.recipient,100));
  if(o.kind==='rating')ok=(d.score===null||Number.isFinite(d.score)&&d.score>=0&&d.score<=10&&Number.isInteger(d.score*4))&&text(d.comment,2000);
+ if(o.kind==='memory-title')ok=!!o.activity&&text(d.title,120)&&!!d.title.trim()&&Object.keys(d).length===1;
  if(o.kind==='memory-location')ok=!!o.activity&&text(d.location,160)&&Object.keys(d).length===1;
  if(o.kind==='goal')ok=!!o.activity&&text(d.title,200)&&!!d.title.trim()&&['films','games','dreams'].includes(d.group)&&Object.keys(d).length===2;
  if(o.kind==='goal-state')ok=!!o.activity&&typeof d.completed==='boolean'&&Object.keys(d).length===1;
