@@ -1,7 +1,7 @@
 'use strict';
-// Release 1.0 (build 36): shared goals, editable contributions and stable collection navigation.
-const VERSION=36,BASE=new URL('./',self.location.href),CACHE='tra-noi-pages-'+BASE.pathname+'-v36';
-const relative=['index.html?v=36','style.css?v=36','boot.js?v=36','model.js?v=36','offline.js?v=36','link.js?v=36','interaction.js?v=36','access.js?v=36','preferences.js?v=36','viewport.js?v=36','app.js?v=36','backup.js?v=36','manifest.json','manifest-one.json','manifest-two.json','icon.svg?v=36','icon-192.png?v=36','icon-512.png?v=36','apple-touch-icon.png?v=36','vendor/qrcode.js','vendor/jsqr.js','installazione.html','nuova-icona.html','manifest-icon.json'];
+// Release 1.0 (build 37): compact goals notebook, contextual prompts and default Altro category.
+const VERSION=37,BASE=new URL('./',self.location.href),CACHE='tra-noi-pages-'+BASE.pathname+'-v37';
+const relative=['index.html?v=37','style.css?v=37','boot.js?v=37','model.js?v=37','offline.js?v=37','link.js?v=37','interaction.js?v=37','access.js?v=37','preferences.js?v=37','viewport.js?v=37','app.js?v=37','backup.js?v=37','manifest.json','manifest-one.json','manifest-two.json','icon.svg?v=37','icon-192.png?v=37','icon-512.png?v=37','apple-touch-icon.png?v=37','vendor/qrcode.js','vendor/jsqr.js','installazione.html','nuova-icona.html','manifest-icon.json'];
 const ASSETS=relative.map(p=>new URL(p,BASE).href),SHELL=ASSETS[0];
 self.addEventListener('install',e=>e.waitUntil((async()=>{const cache=await caches.open(CACHE);await cache.addAll(ASSETS);await self.skipWaiting();})()));
 self.addEventListener('activate',e=>e.waitUntil((async()=>{for(const key of await caches.keys())if(key!==CACHE&&key.startsWith('tra-noi-pages-'+BASE.pathname+'-v'))await caches.delete(key);await self.clients.claim();})()));

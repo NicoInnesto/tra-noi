@@ -189,3 +189,31 @@ body.guide-body{height:auto;min-height:100svh;overflow:auto}.guide-page{max-widt
 .goal-card{display:grid;grid-template-columns:36px minmax(0,1fr);gap:12px;align-items:center;padding:17px;border:1px solid var(--line);border-radius:18px;background:var(--surface)}.goal-card>strong{font-size:14px;font-weight:500;overflow-wrap:anywhere}.goal-check{display:grid;place-items:center;width:34px;height:34px;border:1px solid var(--line);border-radius:50%;background:transparent;color:var(--pink)}.goal-check svg{width:18px}.goal-check[aria-pressed=true]{background:var(--pink);color:var(--bg)}.goal-actions{grid-column:2;display:flex;gap:20px}.goal-actions .text-button{font-size:10px}
 .goal-archive{border-top:1px solid var(--line);padding-top:23px}.goal-archive>summary{display:flex;align-items:center;gap:10px;color:var(--text);font-size:14px}.goal-archive>summary svg{width:20px;color:var(--pink)}.goal-archive>summary span{margin-left:auto;color:var(--muted)}
 .rating strong svg{width:20px;height:20px}.memory-place{display:flex;align-items:center;gap:6px}.memory-place svg{width:14px;height:14px}.edit-contribution{width:100%;margin:12px 0}.memory-footer{display:grid;gap:14px}#ratingForm>.media-upload,#ratingForm #memoryUploadSlot .media-upload{border-top:0;padding-top:0}#ratingForm .gallery{margin:20px 0}.ratings p{line-height:1.7}.collection-tabs{overflow-anchor:none}
+
+/* An independent notebook for our plans */
+.goals-entry{margin-top:22px}
+.goals-mode:not([data-theme=light]){--bg:#101b26;--surface:#172837;--card:#203341;--text:#f1f5f7;--muted:#aabcc8;--pink:#b5d8e5;--line:#dcebf21c}
+.goals-mode[data-theme=light]{--bg:#f4f7f8;--surface:#fff;--card:#e8eff2;--text:#253e4c;--muted:#607986;--pink:#376c81;--line:#2e596b20}
+.goals-mode .world-brand em{color:var(--pink)}
+.goals-page{padding:0 0 12px;min-height:100%}
+.goals-masthead{position:relative;isolation:isolate;padding:22px 0 25px;border-bottom:1px solid var(--line);margin-bottom:25px}
+.goals-masthead .page-heading h1{font-size:40px}.goals-masthead .page-heading p:not(.eyebrow){font-size:12px}.goals-masthead .primary{font-size:11px;min-height:42px;padding:10px 13px}
+.goals-mode .primary{background:#bedce8;color:#203e4d}.goals-mode[data-theme=light] .primary{background:#376c81;color:white}
+.goals-page .goal-section{margin:18px 0 24px}
+.goals-page .goal-section h2{font-size:21px;line-height:1.25;margin:0 0 12px;gap:10px}
+.goals-page .goal-section h2 svg{width:20px;height:20px}
+.goals-page .goal-section h2 span{font-size:11px}
+.goals-page .goal-list{gap:8px}
+.goals-page .goal-card{grid-template-columns:32px minmax(0,1fr) auto;gap:10px;min-height:62px;padding:10px 12px;border-radius:15px;background:var(--surface)}
+.goals-page .goal-card>strong{font-size:13px;line-height:1.45}
+.goals-page .goal-check{width:32px;height:32px;color:var(--pink)}
+.goals-page .goal-check[aria-pressed=true]{background:var(--pink);color:var(--bg)}
+.goals-page .goal-actions{grid-column:3;display:flex;gap:2px}
+.goals-page .goal-action{display:grid;place-items:center;width:34px;height:36px;padding:7px;color:var(--muted);border-radius:10px}
+.goals-page .goal-action svg{width:17px;height:17px}
+.goals-page .goal-action:hover{background:var(--line);color:var(--text)}
+.goals-page .goal-films h2>svg{color:#9dc9dd}.goals-page .goal-games h2>svg{color:#b8c1e4}.goals-page .goal-dreams h2>svg{color:#dabca9}
+[data-theme=light] .goals-page .goal-films h2>svg{color:#427d99}[data-theme=light] .goals-page .goal-games h2>svg{color:#69659d}[data-theme=light] .goals-page .goal-dreams h2>svg{color:#9b7055}
+.goals-page .goal-archive{padding-top:18px;margin-top:28px}
+@media(min-width:760px){.goals-entry{margin-top:0}.goals-page{max-width:820px;margin:auto}.goals-masthead .page-heading h1{font-size:48px}.goals-page .goal-section h2{font-size:25px}}
+@media(max-width:380px){.goals-masthead{align-items:flex-start;flex-direction:column;gap:14px}.goals-masthead .page-heading h1{font-size:36px}}
