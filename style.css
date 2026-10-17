@@ -178,3 +178,14 @@ body.guide-body{height:auto;min-height:100svh;overflow:auto}.guide-page{max-widt
 .memory-footer{display:flex;flex-direction:column;align-items:stretch;gap:10px;margin-top:24px}
 .memory-footer>.text-button{align-self:flex-start}.memory-footer .delete-memory-section{margin-top:2px}
 .media-actions{display:flex;justify-content:flex-end}
+
+/* Goals and readable memory contributions */
+.stat-strip{grid-template-columns:repeat(4,minmax(0,1fr))}
+.stat-strip div{flex-direction:column;align-items:center;gap:5px}
+.stat-strip span{font-size:10px;text-align:center}
+.goals-entry{display:flex;align-items:center;gap:15px;width:100%;text-align:left;padding:22px;border:1px solid var(--line);border-radius:23px;background:linear-gradient(125deg,var(--surface),#a995db18);margin-bottom:28px}
+.goals-entry .tile-icon{margin:0;flex-shrink:0}.goals-entry strong{display:block;font:normal 25px var(--serif)}.goals-entry small{display:block;color:var(--muted);margin-top:7px;font-size:11px}.goals-entry>.chevron{margin-left:auto;color:var(--pink);width:18px}
+.goal-section{margin:28px 0}.goal-section h2{display:flex;align-items:center;gap:10px;font:normal 24px var(--serif)}.goal-section h2 svg{width:22px;color:var(--pink)}.goal-section h2 span{margin-left:auto;font:12px var(--sans);color:var(--muted)}.goal-list{display:grid;gap:10px}
+.goal-card{display:grid;grid-template-columns:36px minmax(0,1fr);gap:12px;align-items:center;padding:17px;border:1px solid var(--line);border-radius:18px;background:var(--surface)}.goal-card>strong{font-size:14px;font-weight:500;overflow-wrap:anywhere}.goal-check{display:grid;place-items:center;width:34px;height:34px;border:1px solid var(--line);border-radius:50%;background:transparent;color:var(--pink)}.goal-check svg{width:18px}.goal-check[aria-pressed=true]{background:var(--pink);color:var(--bg)}.goal-actions{grid-column:2;display:flex;gap:20px}.goal-actions .text-button{font-size:10px}
+.goal-archive{border-top:1px solid var(--line);padding-top:23px}.goal-archive>summary{display:flex;align-items:center;gap:10px;color:var(--text);font-size:14px}.goal-archive>summary svg{width:20px;color:var(--pink)}.goal-archive>summary span{margin-left:auto;color:var(--muted)}
+.rating strong svg{width:20px;height:20px}.memory-place{display:flex;align-items:center;gap:6px}.memory-place svg{width:14px;height:14px}.edit-contribution{width:100%;margin:12px 0}.memory-footer{display:grid;gap:14px}#ratingForm>.media-upload,#ratingForm #memoryUploadSlot .media-upload{border-top:0;padding-top:0}#ratingForm .gallery{margin:20px 0}.ratings p{line-height:1.7}.collection-tabs{overflow-anchor:none}

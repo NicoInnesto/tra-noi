@@ -3,7 +3,7 @@
 const sections={experiences:'Esperienze',trips:'Vacanze e weekend',holidays:'Festività',gifts:'Regali',dance:'Danza'};
 const people={one:{id:'one',firstName:'Persona 1',lastName:'',photo:''},two:{id:'two',firstName:'Persona 2',lastName:'',photo:''}};
 const countryCodes='AD AE AF AG AI AL AM AO AQ AR AS AT AU AW AX AZ BA BB BD BE BF BG BH BI BJ BL BM BN BO BQ BR BS BT BV BW BY BZ CA CC CD CF CG CH CI CK CL CM CN CO CR CU CV CW CX CY CZ DE DJ DK DM DO DZ EC EE EG EH ER ES ET FI FJ FK FM FO FR GA GB GD GE GF GG GH GI GL GM GN GP GQ GR GS GT GU GW GY HK HM HN HR HT HU ID IE IL IM IN IO IQ IR IS IT JE JM JO JP KE KG KH KI KM KN KP KR KW KY KZ LA LB LC LI LK LR LS LT LU LV LY MA MC MD ME MF MG MH MK ML MM MN MO MP MQ MR MS MT MU MV MW MX MY MZ NA NC NE NF NG NI NL NO NP NR NU NZ OM PA PE PF PG PH PK PL PM PN PR PS PT PW PY QA RE RO RS RU RW SA SB SC SD SE SG SH SI SJ SK SL SM SN SO SR SS ST SV SX SY SZ TC TD TF TG TH TJ TK TL TM TN TO TR TT TV TW TZ UA UG UM US UY UZ VA VC VE VG VI VN VU WF WS YE YT ZA ZM ZW'.split(' ');
-const defaults=['Cinema','Film a casa','Ristoranti','Concerti','Teatro'];
+const defaults=['Cinema','Film a casa','Ristoranti','Concerti','Teatro','Videogiochi','Musei'];
 function ordered(ops){return [...ops].sort((a,b)=>a.time-b.time||a.id.localeCompare(b.id));}
 function sectionOf(a){const legacy={Viaggi:'trips',Vacanze:'trips',Danza:'dance',Regali:'gifts','Festività':'holidays'};return a.section||(Object.hasOwn(legacy,a.category)?legacy[a.category]:'experiences');}
 function aliases(ops){
@@ -14,7 +14,7 @@ function aliases(ops){
 }
 function resolveAuthor(id,ops){return aliases(ops)[id]||id;}
 function compactOps(ops){
- const deleted=new Set(ops.filter(o=>o.kind==='delete-memory').map(o=>o.activity)),deletedEvents=new Set(ops.filter(o=>o.kind==='delete-countdown').map(o=>o.activity)),seen=new Set(),content=new Set(['create','rating','clear-rating','media','media-state','delete-media']);
+ const deleted=new Set(ops.filter(o=>o.kind==='delete-memory').map(o=>o.activity)),deletedEvents=new Set(ops.filter(o=>o.kind==='delete-countdown').map(o=>o.activity)),deletedGoals=new Set(ops.filter(o=>o.kind==='delete-goal').map(o=>o.activity)),seen=new Set(),content=new Set(['create','rating','clear-rating','media','media-state','delete-media','memory-location']);
  const identity=aliases(ops),who=o=>identity[o.author]||o.author,key=o=>JSON.stringify([o.activity,who(o)]),games=new Set(),letters=new Set(),media=new Set(),ratings=new Map(),results=new Map(),categories=new Map();
  for(const o of ordered(ops)){
   if(o.kind==='delete-game')games.add(JSON.stringify([o.activity,who(o)]));
@@ -29,6 +29,7 @@ function compactOps(ops){
  // The owner's tombstone remains after the original game is compacted away.
  for(const o of ops)if(o.kind==='delete-game'&&!ops.some(g=>g.kind==='game'&&g.activity===o.activity))deletedGameIds.add(o.activity);
  return ops.filter(o=>{
+  if(deletedGoals.has(o.activity)&&['goal','goal-state'].includes(o.kind))return false;
   if(seen.has(o.id))return false;seen.add(o.id);
   if(deleted.has(o.activity)&&content.has(o.kind)||deletedEvents.has(o.activity)&&o.kind==='countdown')return false;
   if(o.kind==='game'&&games.has(key(o))||o.kind==='letter'&&letters.has(key(o)))return false;
@@ -41,6 +42,7 @@ function compactOps(ops){
 function project(ops){
  ops=compactOps(ops);
  const countryStates=new Map();
+ const goals=new Map(),goalStates=new Map();
  const memories=new Map(),countdowns=new Map(),mediaStates=new Map(),categories=new Set(defaults),customCategories=new Map(),hiddenCategories=new Set(),profiles=Object.create(null),settings=Object.create(null),letters=new Map(),games=new Map(),results=[];
  for(const [id,p]of Object.entries(people))profiles[id]={...p};
  const identities=aliases(ops);
@@ -51,6 +53,8 @@ function project(ops){
   if(op.kind==='profile')profiles[op.author]={...op.data,id:op.author};
   if(op.kind==='country-state')countryStates.set(op.data.code,op.data.visited);
   if(op.kind==='setting')settings[op.data.key]=op.data.value;
+  if(op.kind==='goal')goals.set(op.activity,{id:op.activity,...op.data,author:op.author,completed:false});
+  if(op.kind==='goal-state')goalStates.set(op.activity,op.data.completed);
   if(op.kind==='countdown')countdowns.set(op.activity,{id:op.activity,...op.data,author:op.author});
   if(op.kind==='letter')letters.set(op.activity,{id:op.activity,...op.data,author:op.author,name:op.name,time:op.time});
   if(op.kind==='game')games.set(op.activity,{id:op.activity,...op.data,author:op.author,name:op.name,time:op.time});
@@ -61,12 +65,13 @@ function project(ops){
    if(a.section==='experiences')categories.add(a.category);
   }
   const a=memories.get(op.activity);if(!a)continue;
+  if(op.kind==='memory-location')a.location=op.data.location;
   if(op.kind==='rating')a.ratings[op.author]={...op.data,name:op.name};
   if(op.kind==='media'&&!a.media.some(m=>m.id===op.id))a.media.push({id:op.id,...op.data});
  }
  for(const name of hiddenCategories){categories.delete(name);customCategories.delete(name);}
  for(const a of memories.values()){if(a.section==='experiences'&&hiddenCategories.has(a.category)){a.category='Altro';categories.add('Altro');}a.removedMedia=a.media.filter(m=>mediaStates.get(JSON.stringify([a.id,m.id]))===true);a.media=a.media.filter(m=>mediaStates.get(JSON.stringify([a.id,m.id]))!==true);}
- return {countries:[...countryStates].filter(([,visited])=>visited).map(([code])=>code).sort(),customCategories:[...customCategories.values()],countdowns:[...countdowns.values()].sort((a,b)=>a.date.localeCompare(b.date)||a.title.localeCompare(b.title)),memories:[...memories.values()].sort((a,b)=>(b.date||'').localeCompare(a.date||'')||a.title.localeCompare(b.title)),categories:[...categories],profiles,settings,identities,letters:[...letters.values()].sort((a,b)=>b.time-a.time),games:[...games.values()].sort((a,b)=>b.time-a.time),results};
+ return {goals:[...goals.values()].map(g=>({...g,completed:goalStates.get(g.id)||false})),countries:[...countryStates].filter(([,visited])=>visited).map(([code])=>code).sort(),customCategories:[...customCategories.values()],countdowns:[...countdowns.values()].sort((a,b)=>a.date.localeCompare(b.date)||a.title.localeCompare(b.title)),memories:[...memories.values()].sort((a,b)=>(b.date||'').localeCompare(a.date||'')||a.title.localeCompare(b.title)),categories:[...categories],profiles,settings,identities,letters:[...letters.values()].sort((a,b)=>b.time-a.time),games:[...games.values()].sort((a,b)=>b.time-a.time),results};
 }
 function validDate(v){if(v==='')return true;if(typeof v!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(v))return false;const d=new Date(v+'T12:00:00Z');return !Number.isNaN(d.valueOf())&&d.toISOString().slice(0,10)===v;}
 function text(v,max){return typeof v==='string'&&v.length<=max;}
@@ -75,7 +80,11 @@ function validateOp(o){
  if(!o||!text(o.id,120)||!o.id||!text(o.activity,120)||!text(o.author,120)||!text(o.name,100)||!Number.isFinite(o.time)||!o.data||typeof o.data!=='object')throw Error('Dati del diario non validi');
  const d=o.data;let ok=false;
  if(o.kind==='create')ok=text(d.title,120)&&!!d.title.trim()&&text(d.category,60)&&!!d.category.trim()&&validDate(d.date)&&(!d.section||Object.hasOwn(sections,d.section))&&(!d.endDate||validDate(d.endDate)&&!!d.date&&d.endDate>=d.date)&&(!d.description||text(d.description,5000))&&(!d.location||text(d.location,160))&&(!d.recipient||text(d.recipient,100));
- if(o.kind==='rating')ok=Number.isInteger(d.score)&&d.score>=1&&d.score<=10&&text(d.comment,2000);
+ if(o.kind==='rating')ok=(d.score===null||Number.isFinite(d.score)&&d.score>=0&&d.score<=10&&Number.isInteger(d.score*4))&&text(d.comment,2000);
+ if(o.kind==='memory-location')ok=!!o.activity&&text(d.location,160)&&Object.keys(d).length===1;
+ if(o.kind==='goal')ok=!!o.activity&&text(d.title,200)&&!!d.title.trim()&&['films','games','dreams'].includes(d.group)&&Object.keys(d).length===2;
+ if(o.kind==='goal-state')ok=!!o.activity&&typeof d.completed==='boolean'&&Object.keys(d).length===1;
+ if(o.kind==='delete-goal')ok=!!o.activity&&Object.keys(d).length===0;
  if(o.kind==='media')ok=text(d.url,40*1024*1024)&&/^data:(image\/(jpeg|png|webp)|video\/(mp4|quicktime|webm));base64,[A-Za-z0-9+/=]+$/.test(d.url)&&text(d.type,80)&&text(d.name,300);
  if(o.kind==='media-state')ok=text(d.mediaId,120)&&!!d.mediaId&&typeof d.removed==='boolean';
  if(o.kind==='delete-memory')ok=!!o.activity&&Object.keys(d).length===0;
@@ -84,7 +93,7 @@ function validateOp(o){
  if(o.kind==='delete-countdown')ok=!!o.activity&&Object.keys(d).length===0;
  if(['delete-game','delete-letter','clear-rating','clear-game-results'].includes(o.kind))ok=!!o.activity&&Object.keys(d).length===0;
  if(o.kind==='delete-media')ok=!!o.activity&&text(d.mediaId,120)&&!!d.mediaId&&Object.keys(d).length===1;
- if(o.kind==='delete-category')ok=text(d.name,60)&&!!d.name.trim()&&!defaults.includes(d.name)&&d.name!=='Altro'&&Object.keys(d).length===1;
+ if(o.kind==='delete-category')ok=text(d.name,60)&&!!d.name.trim()&&!['Cinema','Film a casa','Ristoranti','Concerti','Teatro'].includes(d.name)&&d.name!=='Altro'&&Object.keys(d).length===1;
  if(o.kind==='category')ok=text(d.name,60)&&!!d.name.trim();
  if(o.kind==='identity')ok=text(d.legacy,120)&&!!d.legacy&&!Object.hasOwn(people,d.legacy)&&text(d.person,120)&&!!d.person&&d.person!==d.legacy&&o.author===d.person;
  if(o.kind==='profile')ok=text(d.firstName,40)&&!!d.firstName.trim()&&text(d.lastName,60)&&image(d.photo)&&(d.nickname===undefined||text(d.nickname,30));

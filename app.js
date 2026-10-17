@@ -1,8 +1,8 @@
 'use strict';
 window.diaryBoot=window.diaryBoot||{phase:'Caricamento del diario',ready:false};
-const VERSION=35;
+const VERSION=36;
 const RELEASE='1.0';
-const WIRE_VERSION=31;
+const WIRE_VERSION=36;
 const uuid=()=>crypto.randomUUID?crypto.randomUUID():([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g,c=>(c^crypto.getRandomValues(new Uint8Array(1))[0]&15>>c/4).toString(16));
 const $=id=>document.getElementById(id);
 const storagePrefix='tra-noi:'+new URL('./',location.href).pathname+':';
@@ -119,7 +119,7 @@ async function init(){
  const request=requestedPerson();
  if(Object.hasOwn(people,savedPerson)){author=savedPerson;myName=personName();profileMismatch=!!request&&request!==author;setInstallManifest();}
  else if(request)await choosePerson(request);
- state=DiaryModel.project(ops);view=['home','ricordi','calendario','lettere','countdown','giochi'].includes(location.hash.slice(1))?location.hash.slice(1):'home';
+ state=DiaryModel.project(ops);view=['home','ricordi','calendario','obiettivi','lettere','countdown','giochi'].includes(location.hash.slice(1))?location.hash.slice(1):'home';
  window.diaryBoot.phase='Diario pronto';window.diaryBoot.ready=true;$('bootStatus').hidden=true;render();reportDiagnostic('page-ready',{version:VERSION});
  if(!window.isSecureContext)$('trialNote').hidden=false;
  DiaryOffline.start();updateInstallUI();
@@ -133,15 +133,25 @@ function categoryIcon(name){return {Cinema:'film','Film a casa':'home',Ristorant
 function empty(title,body,button,action,ic='heart'){return '<div class="empty"><span class="tile-icon">'+icon(ic)+'</span><h2>'+title+'</h2><p>'+body+'</p>'+(button?'<button class="primary" data-action="'+action+'">'+icon('plus')+button+'</button>':'')+'</div>';}
 function collectionTile(key,wide=false){const s=sectionInfo[key],n=state.memories.filter(a=>a.section===key).length;return '<button class="collection-card tone-'+key+(wide?' wide-tile':'')+'" data-collection="'+key+'"><span class="tile-icon">'+icon(s.icon)+'</span><strong>'+s.title+'</strong><small>'+n+' '+(n===1?'ricordo':'ricordi')+'</small>'+icon('right','chevron')+'</button>';}
 function memoryCard(a){
- const photo=photoOf(a),ratings=Object.entries(a.ratings);
- const votes=ratings.length?'<span class="memory-ratings">'+ratings.map(([person,r])=>'<span class="memory-rating">'+icon('star')+'<span>'+esc(displayName(person))+' '+r.score+'/10</span></span>').join('')+'</span>':'<span>'+icon('heart')+'Da raccontare</span>';
+ const photo=photoOf(a),ratings=Object.entries(a.ratings).filter(([,r])=>r.score!==null);
+ const votes=ratings.length?'<span class="memory-ratings">'+ratings.map(([person,r])=>'<span class="memory-rating">'+icon('star')+'<span>'+esc(displayName(person))+' '+formatScore(r.score)+'/10</span></span>').join('')+'</span>':'<span>'+icon('heart')+'Da raccontare</span>';
  return '<button class="memory-card" data-open="'+esc(a.id)+'"><div class="memory-cover tone-'+a.section+'">'+(photo?'<img src="'+esc(photo.url)+'" alt="" loading="lazy">':icon(a.section==='experiences'?categoryIcon(a.category):sectionInfo[a.section].icon))+'</div><div class="memory-body"><span class="badge">'+esc(a.category)+'</span><h3>'+esc(a.title)+'</h3><p>'+esc(formatDate(a.date))+'</p><div class="memory-meta">'+votes+'<span>'+a.media.length+' foto/video</span></div>'+(pending(a.id)?'<div class="sync-pending">Da condividere con l’altro diario</div>':'')+'</div></button>';
 }
+const collectionScroll={tabs:0,chips:0};
+function collectionTabs(current){
+ return '<div class="collection-tabs">'+Object.keys(sectionInfo).map(key=>'<button data-collection="'+key+'" class="'+(current===key?'active':'')+'">'+icon(sectionInfo[key].icon)+sectionInfo[key].title+'</button>').join('')+'<button data-view="lettere" class="'+(current==='lettere'?'active':'')+'">'+icon('letter')+'Pensiero</button></div>';
+}
 function render(){
+ const oldTabs=$('view').querySelector('.collection-tabs'),oldChips=$('view').querySelector('.chips');
+ if(oldTabs)collectionScroll.tabs=oldTabs.scrollLeft;
+ if(oldChips)collectionScroll.chips=oldChips.scrollLeft;
  state=DiaryModel.project(ops);
  $('profileButton').innerHTML=avatar(state.profiles[author]);updatePartnerStatus();updateProfileMenu();
  renderNavigation();
- $('view').innerHTML=({home:renderHome,ricordi:renderMemories,calendario:renderCalendar,lettere:renderLetters,countdown:renderCountdowns,giochi:renderGames}[view])();
+ $('view').innerHTML=({home:renderHome,ricordi:renderMemories,calendario:renderCalendar,lettere:renderLetters,countdown:renderCountdowns,giochi:renderGames,obiettivi:renderGoals}[view])();
+ const newTabs=$('view').querySelector('.collection-tabs'),newChips=$('view').querySelector('.chips');
+ if(newTabs)newTabs.scrollLeft=collectionScroll.tabs;
+ if(newChips)newChips.scrollLeft=collectionScroll.chips;
  $('storage').textContent='Archivio locale: circa '+(ops.reduce((n,o)=>n+new Blob([JSON.stringify(o)]).size,0)/1024/1024).toFixed(1)+' MB. Gli originali in Foto occupano spazio separatamente.';
  tickCounter();
  if(active&&!state.memories.some(m=>m.id===active)){if($('photoViewer').open)$('photoViewer').close();if($('detailDialog').open)$('detailDialog').close();active=null;}
@@ -154,7 +164,7 @@ function render(){
 }
 function renderHome(){
  const date=state.settings.anniversaryStart?.date||state.settings.anniversary||'',upcomingCount=state.countdowns.filter(c=>DiaryInteraction.countdownDays(c.date)>=0).length;
- return '<div class="home-topline"><span>'+esc(capitalize(new Date().toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long'})))+'</span><span>'+icon('lock')+'Il nostro spazio</span></div><div class="home-layout"><div><section class="hero">'+(state.settings.cover?'<img class="hero-image" src="'+esc(state.settings.cover)+'" alt="La nostra foto">':'<div class="hero-orbit"></div><div class="hero-orbit second"></div><div class="hero-heart">'+icon('heart')+'</div>')+'<div class="hero-content"><div><span class="hero-kicker">LA NOSTRA STORIA</span><h1>Tu, io<br><em>Per sempre <span class="forever-symbol" aria-label="infinito">∞</span></em></h1></div><div class="together"><div class="together-title">Insieme da</div><div class="counter" aria-label="Tempo trascorso insieme"><div><strong id="days">—</strong><span>giorni</span></div><div><strong id="hours">—</strong><span>ore</span></div><div><strong id="minutes">—</strong><span>minuti</span></div><div><strong id="seconds">—</strong><span>secondi</span></div></div><p class="together-since">'+(date?'Dal '+esc(formatDate(date))+(state.settings.anniversaryStart?' · ore '+esc(state.settings.anniversaryStart.time):''):'Scegli la vostra data nel profilo')+'</p></div></div></section><div class="stat-strip"><div><strong>'+state.memories.length+'</strong><span>Ricordi</span></div><div><strong>'+state.countries.length+'</strong><span>Paesi visitati</span></div><div><strong>'+upcomingCount+'</strong><span>Countdown</span></div></div></div><div class="home-side"><div class="section-heading"><h2>I nostri traguardi</h2><button class="text-button" data-view="ricordi">Esplora '+icon('right')+'</button></div><div class="collection-grid">'+Object.keys(sectionInfo).map(key=>collectionTile(key)).join('')+'<button class="collection-card tone-letters" data-view="lettere"><span class="tile-icon">'+icon('letter')+'</span><strong>Pensiero</strong><small>'+state.letters.length+' '+(state.letters.length===1?'ricordo':'ricordi')+'</small>'+icon('right','chevron')+'</button></div></div></div>';
+ return '<div class="home-topline"><span>'+esc(capitalize(new Date().toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long'})))+'</span><span>'+icon('lock')+'Il nostro spazio</span></div><div class="home-layout"><div><section class="hero">'+(state.settings.cover?'<img class="hero-image" src="'+esc(state.settings.cover)+'" alt="La nostra foto">':'<div class="hero-orbit"></div><div class="hero-orbit second"></div><div class="hero-heart">'+icon('heart')+'</div>')+'<div class="hero-content"><div><span class="hero-kicker">LA NOSTRA STORIA</span><h1>Tu, io<br><em>Per sempre <span class="forever-symbol" aria-label="infinito">∞</span></em></h1></div><div class="together"><div class="together-title">Insieme da</div><div class="counter" aria-label="Tempo trascorso insieme"><div><strong id="days">—</strong><span>giorni</span></div><div><strong id="hours">—</strong><span>ore</span></div><div><strong id="minutes">—</strong><span>minuti</span></div><div><strong id="seconds">—</strong><span>secondi</span></div></div><p class="together-since">'+(date?'Dal '+esc(formatDate(date))+(state.settings.anniversaryStart?' · ore '+esc(state.settings.anniversaryStart.time):''):'Scegli la vostra data nel profilo')+'</p></div></div></section><div class="stat-strip"><div><strong>'+state.memories.length+'</strong><span>Ricordi</span></div><div><strong>'+state.countries.length+'</strong><span>Paesi visitati</span></div><div><strong>'+upcomingCount+'</strong><span>Countdown</span></div><div><strong>'+state.goals.filter(g=>!g.completed).length+'</strong><span>Obiettivi</span></div></div></div><div class="home-side"><button class="goals-entry" data-view="obiettivi"><span class="tile-icon">'+icon('sparkle')+'</span><span><strong>I nostri obiettivi</strong><small>'+state.goals.filter(g=>!g.completed).length+' da realizzare insieme</small></span>'+icon('right','chevron')+'</button><div class="section-heading"><h2>I nostri traguardi</h2><button class="text-button" data-view="ricordi">Esplora '+icon('right')+'</button></div><div class="collection-grid">'+Object.keys(sectionInfo).map(key=>collectionTile(key)).join('')+'<button class="collection-card tone-letters" data-view="lettere"><span class="tile-icon">'+icon('letter')+'</span><strong>Pensiero</strong><small>'+state.letters.length+' '+(state.letters.length===1?'ricordo':'ricordi')+'</small>'+icon('right','chevron')+'</button></div></div></div>';
 }
 function tickCounter(){
  tickCountdowns();
@@ -165,7 +175,7 @@ function tickCounter(){
 function renderMemories(){
  if(!collection)return '<div class="heading-row"><div class="page-heading"><p class="eyebrow">IL NOSTRO ALBUM</p><h1>Ricordi da <em>tenere</em></h1><p>Ogni cosa bella trova il suo posto.</p></div><button class="primary" data-action="new">'+icon('plus')+'Aggiungi</button></div><div class="collection-grid all-collections">'+Object.keys(sectionInfo).map(key=>collectionTile(key)).join('')+'<button class="collection-card tone-letters" data-view="lettere"><span class="tile-icon">'+icon('letter')+'</span><strong>Pensiero</strong><small>'+state.letters.length+' '+(state.letters.length===1?'pensiero da rileggere' :'pensieri da rileggere')+'</small>'+icon('right','chevron')+'</button>'+'</div><div class="section-heading"><h2>Tutti i nostri ricordi</h2><p>'+state.memories.length+' in tutto</p></div><div class="memory-grid">'+(state.memories.length?state.memories.map(memoryCard).join(''):empty('Abbiamo un sacco di pagine davanti','Puoi aggiungere anche ricordi passati. La data non è obbligatoria.','Aggiungi un ricordo','new','album'))+'</div>';
  const s=sectionInfo[collection],list=state.memories.filter(a=>a.section===collection&&(selected==='Tutti'||collection!=='experiences'||a.category===selected));
- return '<button class="text-button back-link" data-action="all-collections">'+icon('left')+'Tutte le raccolte</button><div class="heading-row"><div class="page-heading"><p class="eyebrow">IL NOSTRO ALBUM</p><h1>'+s.title+'</h1><p>'+s.subtitle+'</p></div><button class="primary" data-action="new">'+icon('plus')+'Aggiungi</button></div><div class="collection-tabs">'+Object.keys(sectionInfo).map(key=>'<button data-collection="'+key+'" class="'+(key===collection?'active':'')+'">'+icon(sectionInfo[key].icon)+sectionInfo[key].title+'</button>').join('')+'<button data-view="lettere">'+icon('letter')+'Pensiero</button></div>'+(collection==='experiences'?'<div class="chips">'+['Tutti',...state.categories].map(c=>'<button data-cat="'+esc(c)+'" class="'+(selected===c?'active':'')+'">'+esc(c)+'</button>').join('')+'<button class="add-chip" data-action="category">'+icon('plus')+'Categoria</button></div>':'')+(collection==='trips'?'<button class="countries-entry" data-action="countries"><span class="tile-icon">'+icon('trips')+'</span><span><strong>Paesi visitati</strong><small>'+state.countries.length+' '+(state.countries.length===1?'Paese, tante storie':'Paesi, tante storie')+'</small></span>'+icon('right','chevron')+'</button>':'')+(collection==='holidays'?'<p class="section-intro">Halloween, Natale, un anniversario. Una pagina per le foto e le parole di ogni festa vissuta insieme.</p>':'')+'<div class="memory-grid">'+(list.length?list.map(memoryCard).join(''):empty('Il prossimo capitolo è nostro','Aggiungi un ricordo a questa raccolta. Foto e contributi potranno arrivare anche dopo.','Aggiungi un ricordo','new',s.icon))+'</div>';
+ return '<button class="text-button back-link" data-action="all-collections">'+icon('left')+'Tutte le raccolte</button><div class="heading-row"><div class="page-heading"><p class="eyebrow">IL NOSTRO ALBUM</p><h1>'+s.title+'</h1><p>'+s.subtitle+'</p></div><button class="primary" data-action="new">'+icon('plus')+'Aggiungi</button></div>'+collectionTabs(collection)+(collection==='experiences'?'<div class="chips">'+['Tutti',...state.categories].map(c=>'<button data-cat="'+esc(c)+'" class="'+(selected===c?'active':'')+'">'+esc(c)+'</button>').join('')+'<button class="add-chip" data-action="category">'+icon('plus')+'Categoria</button></div>':'')+(collection==='trips'?'<button class="countries-entry" data-action="countries"><span class="tile-icon">'+icon('trips')+'</span><span><strong>Paesi visitati</strong><small>'+state.countries.length+' '+(state.countries.length===1?'Paese, tante storie':'Paesi, tante storie')+'</small></span>'+icon('right','chevron')+'</button>':'')+(collection==='holidays'?'<p class="section-intro">Halloween, Natale, un anniversario. Una pagina per le foto e le parole di ogni festa vissuta insieme.</p>':'')+'<div class="memory-grid">'+(list.length?list.map(memoryCard).join(''):empty('Il prossimo capitolo è nostro','Aggiungi un ricordo a questa raccolta. Foto e contributi potranno arrivare anche dopo.','Aggiungi un ricordo','new',s.icon))+'</div>';
 }
 function onDay(a,date){return !!a.date&&a.date<=date&&(a.endDate||a.date)>=date;}
 function renderCalendar(){
@@ -213,8 +223,25 @@ $('countdownForm').onsubmit=async e=>{e.preventDefault();if(countdownPhotoPendin
 };
 $('deleteCountdown').onclick=()=>{const event=state.countdowns.find(c=>c.id===countdownEdited);if(!event)return;$('deleteCountdownName').textContent=event.title;$('deleteCountdownDialog').showModal();};
 $('confirmDeleteCountdown').onclick=async e=>withSave(e.currentTarget,async()=>{const id=countdownEdited;if(!id)return;await addOp('delete-countdown',id,{});$('deleteCountdownDialog').close();$('countdownDialog').close();toast('Countdown eliminato. La cancellazione passerà all’altro diario al collegamento.');});
+const goalGroups={films:['Film da vedere','Film visti','film'],games:['Videogiochi da giocare','Videogiochi giocati','games'],dreams:['Sogni insieme','Sogni realizzati','sparkle']};
+let goalEdited=null,goalArchiveOpen=false;
+function goalCard(g){
+ return '<article class="goal-card"><button class="goal-check" data-goal-toggle="'+esc(g.id)+'" aria-label="'+(g.completed?'Da realizzare di nuovo':'Segna come completato')+'" aria-pressed="'+g.completed+'">'+icon(g.completed?'check':'plus')+'</button><strong>'+esc(g.title)+'</strong><div class="goal-actions"><button class="text-button" data-goal-edit="'+esc(g.id)+'">Modifica</button><button class="text-button danger-button" data-goal-delete="'+esc(g.id)+'">Elimina</button></div></article>';
+}
+function goalSections(completed){
+ return Object.entries(goalGroups).map(([group,labels])=>{const list=state.goals.filter(g=>g.group===group&&g.completed===completed);return '<section class="goal-section"><h2>'+icon(labels[2])+labels[completed?1:0]+'<span>'+list.length+'</span></h2><div class="goal-list">'+(list.length?list.map(goalCard).join(''):'<p class="muted">'+(completed?'Le vostre conquiste appariranno qui':'Una lista ancora da sognare')+'</p>')+'</div></section>';}).join('');
+}
+function renderGoals(){
+ return '<button class="text-button back-link" data-view="home">'+icon('left')+'Home</button><div class="heading-row"><div class="page-heading"><p class="eyebrow">UN PASSO ALLA VOLTA</p><h1>I nostri <em>obiettivi</em></h1><p>Le cose che vorremmo vivere, insieme.</p></div><button class="primary" data-action="new-goal">'+icon('plus')+'Obiettivo</button></div>'+goalSections(false)+'<details id="goalArchive" class="goal-archive" '+(goalArchiveOpen?'open':'')+'><summary>'+icon('check')+'Completati <span>'+state.goals.filter(g=>g.completed).length+'</span></summary>'+goalSections(true)+'</details><p class="field-help">Un obiettivo completato resta qui. Potrete raccontarlo nei Ricordi quando vorrete.</p>';
+}
+function openGoal(id){
+ const goal=state.goals.find(g=>g.id===id);goalEdited=goal?.id||null;
+ $('goalForm').reset();$('goalHeading').textContent=goal?'Il nostro obiettivo':'Un nuovo obiettivo';$('goalTitle').value=goal?.title||'';$('goalGroup').value=goal?.group||'films';$('goalDialog').showModal();
+}
+$('goalForm').onsubmit=async e=>{e.preventDefault();const id=goalEdited,title=$('goalTitle').value.trim(),group=$('goalGroup').value;if(!title)return;await withSave(e.submitter,async()=>{if(id&&!state.goals.some(g=>g.id===id))throw Error('Questo obiettivo è stato eliminato');await addOp('goal',id||uuid(),{title,group});$('goalDialog').close();toast('Obiettivo salvato');});};
+$('view').addEventListener('toggle',e=>{if(e.target.id==='goalArchive')goalArchiveOpen=e.target.open;},true);
 function renderLetters(){
- return '<button class="text-button back-link" data-view="ricordi">'+icon('left')+'Tutte le raccolte</button><div class="heading-row"><div class="page-heading"><p class="eyebrow">TRA ME E TE</p><h1>Le parole <em>restano</em></h1><p>Un pensiero da aprire, leggere e rileggere.</p></div><button class="primary" data-action="write-letter">'+icon('plus')+'Scrivi</button></div><div class="letter-grid">'+(state.letters.length?state.letters.map(l=>'<button class="letter-card" data-letter="'+esc(l.id)+'"><span class="letter-symbol">'+icon('letter')+'</span><span class="badge">'+(l.author===author?'Da te, con amore':'Da '+esc(nameOf(l.author,l.name)))+'</span><h2>'+esc(l.title)+'</h2><p>'+esc(l.body)+'</p><small>'+new Date(l.time).toLocaleDateString('it-IT',{day:'numeric',month:'long',year:'numeric'})+'</small></button>').join(''):empty('Ci sono cose che è bello scriversi','Una lettera lunga o due righe al volo. Il diario conserverà le vostre parole.','Scrivi la prima lettera','write-letter','letter'))+'</div>';
+ return '<button class="text-button back-link" data-view="ricordi">'+icon('left')+'Tutte le raccolte</button><div class="heading-row"><div class="page-heading"><p class="eyebrow">TRA ME E TE</p><h1>Le parole <em>restano</em></h1><p>Un pensiero da aprire, leggere e rileggere.</p></div><button class="primary" data-action="write-letter">'+icon('plus')+'Scrivi</button></div>'+collectionTabs('lettere')+'<div class="letter-grid">'+(state.letters.length?state.letters.map(l=>'<button class="letter-card" data-letter="'+esc(l.id)+'"><span class="letter-symbol">'+icon('letter')+'</span><span class="badge">'+(l.author===author?'Da te, con amore':'Da '+esc(nameOf(l.author,l.name)))+'</span><h2>'+esc(l.title)+'</h2><p>'+esc(l.body)+'</p><small>'+new Date(l.time).toLocaleDateString('it-IT',{day:'numeric',month:'long',year:'numeric'})+'</small></button>').join(''):empty('Ci sono cose che è bello scriversi','Una lettera lunga o due righe al volo. Il diario conserverà le vostre parole.','Scrivi la prima lettera','write-letter','letter'))+'</div>';
 }
 function savedGame(g){
  const players=[...new Set(state.results.filter(r=>r.game===g.id).map(r=>r.author))];
@@ -226,7 +253,7 @@ function renderGames(){
  return '<div class="page-heading"><p class="eyebrow">ANCORA QUALCOSA DA SCOPRIRE</p><h1>Un po’ di noi<br><em>Per gioco</em></h1><p class="games-intro">Create giochi e sfidatevi, ognuno con i propri risultati</p></div><div class="game-types">'+Object.entries(gameTypes).filter(([key])=>key!=='truefalse').map(([key,g])=>'<button class="game-type" data-game-type="'+key+'">'+icon(g.icon)+'<strong>'+g.title+'</strong><small>'+g.subtitle+'</small></button>').join('')+'</div><div class="section-heading"><h2>Creati da noi</h2><p>'+state.games.length+' '+(state.games.length===1?'gioco':'giochi')+'</p></div><div class="game-list">'+(state.games.length?state.games.map(savedGame).join(''):empty('Le regole le inventiamo noi','Scegli un tipo di gioco qui sopra e prepara le tue domande. I contenuti li decideremo insieme.','','','games'))+'</div>';
 }
 let pageAnimations=[],pageGhost=null,motionToken=0;
-const pageRenderers={home:renderHome,ricordi:renderMemories,calendario:renderCalendar,lettere:renderLetters,countdown:renderCountdowns,giochi:renderGames};
+const pageRenderers={home:renderHome,ricordi:renderMemories,calendario:renderCalendar,lettere:renderLetters,countdown:renderCountdowns,giochi:renderGames,obiettivi:renderGoals};
 function reducedMotion(){return matchMedia('(prefers-reduced-motion: reduce)').matches;}
 function clearPageMotion(){
  motionToken++;for(const animation of pageAnimations)animation.cancel();pageAnimations=[];pageGhost?.remove();pageGhost=null;$('view').style.transform='';
@@ -238,10 +265,10 @@ function pageSnapshot(next=null){
  $('pageStage').append(node);node.scrollTop=next===null?$('view').scrollTop:0;return node;
 }
 function navigate(next,{fromHash=false,dragOffset=0}={}){
- if(!DiaryInteraction.pages.includes(next)&&next!=='lettere')return;
+ if(!DiaryInteraction.pages.includes(next)&&!['lettere','obiettivi'].includes(next))return;
  if(next==='lettere')collection=null;
  if(next===view){clearPageMotion();positionNavigationBubble();return;}
- const previous=view,direction=DiaryInteraction.pages.indexOf(next)>DiaryInteraction.pages.indexOf(previous==='lettere'?'ricordi':previous)?1:-1;
+ const previous=view,direction=DiaryInteraction.pages.indexOf(next)>DiaryInteraction.pages.indexOf(previous==='lettere'?'ricordi':previous==='obiettivi'?'home':previous)?1:-1;
  clearPageMotion();const token=motionToken,width=$('pageStage').clientWidth;
  const snapshot=reducedMotion()?null:pageSnapshot();pageGhost=snapshot;
  view=next;if(!fromHash)location.hash=next;render();$('view').scrollTo({top:0,behavior:'instant'});
@@ -250,18 +277,18 @@ function navigate(next,{fromHash=false,dragOffset=0}={}){
  pageAnimations=[snapshot.animate([{transform:'translate3d('+dragOffset+'px,0,0)'},{transform:'translate3d('+(-direction*width)+'px,0,0)'}],timing),$('view').animate([{transform:'translate3d('+(direction*width+dragOffset)+'px,0,0)'},{transform:'translate3d(0,0,0)'}],timing)];
  Promise.all(pageAnimations.map(a=>a.finished)).then(()=>{if(token===motionToken)clearPageMotion();}).catch(()=>{});
 }
-window.addEventListener('hashchange',()=>{const next=location.hash.slice(1);if((DiaryInteraction.pages.includes(next)||next==='lettere')&&next!==view)navigate(next,{fromHash:true});});
+window.addEventListener('hashchange',()=>{const next=location.hash.slice(1);if((DiaryInteraction.pages.includes(next)||['lettere','obiettivi'].includes(next))&&next!==view)navigate(next,{fromHash:true});});
 let navPointer=null,blockNavClickUntil=0;
 function renderNavigation(){
  const nav=$('bottomNav');
  if(!nav.querySelector('.nav-bubble'))nav.innerHTML='<span class="nav-bubble" aria-hidden="true"></span>'+[['home','home','Home'],['ricordi','album','Ricordi'],['calendario','calendar','Calendario'],['countdown','clock','Countdown'],['giochi','games','Giochi']].map(([id,ic,label])=>'<button type="button" data-page="'+id+'">'+icon(ic)+'<span>'+label+'</span></button>').join('');
- for(const link of nav.querySelectorAll('button[data-page]')){const selected=link.dataset.page===(view==='lettere'?'ricordi':view);link.classList.toggle('active',selected);if(selected)link.setAttribute('aria-current','page');else link.removeAttribute('aria-current');}
+ for(const link of nav.querySelectorAll('button[data-page]')){const selected=link.dataset.page===(view==='lettere'?'ricordi':view==='obiettivi'?'home':view);link.classList.toggle('active',selected);if(selected)link.setAttribute('aria-current','page');else link.removeAttribute('aria-current');}
  if(!navPointer)positionNavigationBubble();
 }
 function positionNavigationBubble(clientX=null){
  const nav=$('bottomNav'),links=[...nav.querySelectorAll('button[data-page]')];if(!links.length)return;
  const box=nav.getBoundingClientRect(),first=links[0].getBoundingClientRect(),last=links.at(-1).getBoundingClientRect();
- const index=clientX===null?Math.max(0,DiaryInteraction.pages.indexOf(view==='lettere'?'ricordi':view)):DiaryInteraction.navIndex(clientX,first.left,last.right,links.length),target=links[index].getBoundingClientRect();
+ const index=clientX===null?Math.max(0,DiaryInteraction.pages.indexOf(view==='lettere'?'ricordi':view==='obiettivi'?'home':view)):DiaryInteraction.navIndex(clientX,first.left,last.right,links.length),target=links[index].getBoundingClientRect();
  const left=clientX===null?target.left:Math.max(first.left,Math.min(last.left,clientX-first.width/2));
  nav.style.setProperty('--bubble-x',(left-box.left-nav.clientLeft)+'px');nav.style.setProperty('--bubble-width',target.width+'px');
  for(let i=0;i<links.length;i++)links[i].classList.toggle('nav-preview',clientX!==null&&i===index);
@@ -289,8 +316,11 @@ $('view').addEventListener('click',e=>{
  if(b.dataset.view)return navigate(b.dataset.view);
  if(b.dataset.collection){collection=b.dataset.collection;selected='Tutti';if(view!=='ricordi')navigate('ricordi');else render();return;}
  if(b.dataset.cat){selected=b.dataset.cat;render();return;}
+ if(b.dataset.goalEdit){openGoal(b.dataset.goalEdit);return;}
+ if(b.dataset.goalToggle){const g=state.goals.find(g=>g.id===b.dataset.goalToggle);if(g)withSave(b,()=>addOp('goal-state',g.id,{completed:!g.completed}));return;}
+ if(b.dataset.goalDelete){const g=state.goals.find(g=>g.id===b.dataset.goalDelete);if(g)confirmRemoval('Eliminare questo obiettivo?',g.title,()=>addOp('delete-goal',g.id,{}));return;}
  if(b.dataset.countdown){openCountdown(b.dataset.countdown);return;}
- if(b.dataset.open){active=b.dataset.open;renderDetail();$('detailDialog').showModal();return;}
+ if(b.dataset.open){memoryEditing=false;renderedActivity=null;active=b.dataset.open;renderDetail();$('detailDialog').showModal();return;}
  if(b.dataset.day){calendarDay=b.dataset.day;render();return;}
  if(b.dataset.month){calendarMonth=new Date(calendarMonth.getFullYear(),calendarMonth.getMonth()+Number(b.dataset.month),1);calendarDay=localDay(calendarMonth);render();return;}
  if(b.dataset.letter){openLetter(b.dataset.letter);return;}
@@ -300,6 +330,7 @@ $('view').addEventListener('click',e=>{
  if(b.dataset.play){startGame(b.dataset.play);return;}
  const action=b.dataset.action;
  if(action==='new')openNew();
+ if(action==='new-goal')openGoal();
  if(action==='new-countdown')openCountdown();
  if(action==='countries'){renderCountries();$('countriesDialog').showModal();}
  if(action==='cover')$('coverInput').click();
@@ -328,9 +359,9 @@ $('createForm').onsubmit=async e=>{e.preventDefault();const s=$('sectionInput').
 $('categoryForm').onsubmit=async e=>{e.preventDefault();const name=$('categoryName').value.trim();if(!name)return;if(state.categories.some(c=>c.toLocaleLowerCase()===name.toLocaleLowerCase()))return toast('Questa categoria esiste già');await withSave(e.submitter,async()=>{await addOp('category',uuid(),{name});$('categoryDialog').close();selected=name;render();toast('La vostra nuova categoria è pronta');});};
 async function withSave(button,fn){if(button?.disabled)return;if(button)button.disabled=true;try{await fn();}catch(e){toast(e.message||'Salvataggio non riuscito');}finally{if(button)button.disabled=false;}}
 function renderMediaGallery(a){
- const visible=a.media.map(m=>'<figure class="media-item">'+(m.type.startsWith('image/')?'<button class="photo-open" data-photo-open="'+esc(m.id)+'" aria-label="Apri foto: '+esc(m.name)+'"><img src="'+esc(m.url)+'" alt="'+esc(m.name)+'" loading="lazy"></button>':'<button class="photo-open video-open" data-photo-open="'+esc(m.id)+'" aria-label="Apri video: '+esc(m.name)+'"><video muted playsinline preload="metadata" src="'+esc(m.url)+'"></video><span class="video-badge">▶ Video</span></button>')+'<div class="media-actions"><button class="text-button danger-button" data-delete-media="'+esc(m.id)+'">Elimina</button></div></figure>').join('');
+ const visible=a.media.map(m=>'<figure class="media-item">'+(m.type.startsWith('image/')?'<button type="button" class="photo-open" data-photo-open="'+esc(m.id)+'" aria-label="Apri foto: '+esc(m.name)+'"><img src="'+esc(m.url)+'" alt="'+esc(m.name)+'" loading="lazy"></button>':'<button type="button" class="photo-open video-open" data-photo-open="'+esc(m.id)+'" aria-label="Apri video: '+esc(m.name)+'"><video muted playsinline preload="metadata" src="'+esc(m.url)+'"></video><span class="video-badge">▶ Video</span></button>')+'<div class="media-actions"><button type="button" class="text-button danger-button" data-delete-media="'+esc(m.id)+'">Elimina</button></div></figure>').join('');
  const removed=a.removedMedia||[];
- return '<div class="gallery">'+visible+'</div>'+(removed.length?'<details class="removed-media"><summary>Foto e video rimossi ('+removed.length+')</summary><p class="field-help">Puoi ripristinarli. La rimozione non libera spazio e non modifica la galleria Foto dell’iPhone.</p>'+removed.map(m=>'<div class="removed-media-row"><span>'+esc(m.name)+'</span><button class="text-button" data-media-id="'+esc(m.id)+'" data-media-removed="false">Ripristina</button><button class="text-button danger-button" data-delete-media="'+esc(m.id)+'">Elimina</button></div>').join('')+'</details>':'');
+ return '<div class="gallery">'+visible+'</div>'+(removed.length?'<details class="removed-media"><summary>Foto e video rimossi ('+removed.length+')</summary><p class="field-help">Puoi ripristinarli. La rimozione non libera spazio e non modifica la galleria Foto dell’iPhone.</p>'+removed.map(m=>'<div class="removed-media-row"><span>'+esc(m.name)+'</span><button type="button" class="text-button" data-media-id="'+esc(m.id)+'" data-media-removed="false">Ripristina</button><button type="button" class="text-button danger-button" data-delete-media="'+esc(m.id)+'">Elimina</button></div>').join('')+'</details>':'');
 }
 $('detail').addEventListener('click',async e=>{
  const photo=e.target.closest('[data-photo-open]');if(photo){openPhotoViewer(photo.dataset.photoOpen);return;}
@@ -339,15 +370,34 @@ $('detail').addEventListener('click',async e=>{
  const target=active,mediaId=button.dataset.mediaId,removed=button.dataset.mediaRemoved==='true';
  await withSave(button,async()=>{await addOp('media-state',target,{mediaId,removed});toast(removed?'Rimosso dal ricordo. Puoi ripristinarlo in “Foto e video rimossi”.':'Di nuovo nel vostro ricordo');});
 });
+let memoryEditing=false;
+const memoryUpload=$('detailDialog').querySelector('.media-upload');
+function formatScore(value){return Number(value).toLocaleString('it-IT',{maximumFractionDigits:2});}
 function renderDetail(){
- const draft=renderedActivity===active&&$('comment')?{comment:$('comment').value,score:$('score').value}:null;
- const a=state.memories.find(a=>a.id===active);if(!a)return;const mine=a.ratings[author];
- const canRate=['experiences','dance'].includes(a.section);
- $('detail').innerHTML='<p class="eyebrow">'+esc(a.category)+'</p><h2>'+esc(a.title)+'</h2><div class="detail-meta"><span>'+esc(formatDate(a.date))+(a.endDate?' — '+esc(formatDate(a.endDate)):'')+'</span>'+(a.location?'<span>'+esc(a.location)+'</span>':'')+(a.recipient?'<span>Ricevuto da '+esc(a.recipient)+'</span>':'')+'</div>'+(a.description?'<p class="detail-description">'+esc(a.description)+'</p>':'')+'<p class="field-help">'+(pending(a.id)?'Custodito su questo dispositivo. Collegate i diari per condividerlo.':'I tuoi contributi sono stati ricevuti anche dall’altro diario.')+'</p>'+(canRate?'<div class="ratings">'+Object.entries(a.ratings).map(([id,r])=>'<div class="rating"><div class="rating-name">'+esc(nameOf(id,r.name))+'</div><strong>'+r.score+'<small> / 10</small></strong>'+(r.comment?'<p>'+esc(r.comment)+'</p>':'')+'</div>').join('')+'</div><form id="ratingForm"><div class="form-row"><label>Il tuo voto<select id="score">'+Array.from({length:10},(_,i)=>'<option '+((mine?.score||8)===i+1?'selected':'')+'>'+(i+1)+'</option>').join('')+'</select></label></div><label>Il tuo commento<textarea id="comment" maxlength="2000" placeholder="Che cosa ti è rimasto di questo momento?">'+esc(mine?.comment||'')+'</textarea></label></form>':'')+renderMediaGallery(a)+'<div class="memory-footer">'+(canRate?'<button class="primary" type="submit" form="ratingForm">Salva il tuo contributo</button>':'')+(mine?'<button class="text-button danger-button" id="clearRating">Elimina il mio voto e commento</button>':'')+'<div class="delete-memory-section"><button class="text-button danger-button" id="deleteMemory">Elimina definitivamente il ricordo</button></div></div>';
+ const a=state.memories.find(a=>a.id===active);if(!a)return;
+ const mine=a.ratings[author],canRate=['experiences','dance'].includes(a.section);
+ const draft=renderedActivity===active&&$('comment')?{comment:$('comment').value,score:$('score')?.value??'',location:$('editLocation').value,baseline:$('editLocation').dataset.baseline}:null;
+ memoryUpload.remove();
+ const ratings=Object.entries(a.ratings).filter(([,r])=>r.score!==null||r.comment).map(([id,r])=>'<article class="rating"><div class="rating-name">'+esc(displayName(id))+'</div>'+(r.score!==null?'<strong>'+icon('star')+' '+formatScore(r.score)+'<small> / 10</small></strong>':'')+(r.comment?'<p>'+esc(r.comment)+'</p>':'')+'</article>').join('');
+ const gallery=renderMediaGallery(a);
+ $('detail').innerHTML='<p class="eyebrow">'+esc(a.category)+'</p><h2>'+esc(a.title)+'</h2><div class="detail-meta"><span>'+esc(formatDate(a.date))+(a.endDate?' — '+esc(formatDate(a.endDate)):'')+'</span>'+(a.location?'<span class="memory-place">'+icon('trips')+esc(a.location)+'</span>':'')+(a.recipient?'<span>Ricevuto da '+esc(a.recipient)+'</span>':'')+'</div>'+(a.description?'<p class="detail-description">'+esc(a.description)+'</p>':'')+'<div class="ratings">'+ratings+'</div>'+(!memoryEditing?gallery+'<button class="secondary edit-contribution" id="editContribution">'+(mine?'Modifica il tuo contributo':'Aggiungi il tuo contributo')+'</button>':'<form id="ratingForm">'+(canRate?'<label>Il tuo voto<select id="score"><option value="">Senza voto</option>'+Array.from({length:41},(_,i)=>{const n=i/4;return '<option value="'+n+'" '+(mine?.score===n?'selected':'')+'>'+formatScore(n)+'</option>';}).join('')+'</select></label>':'')+gallery+'<div id="memoryUploadSlot"></div><label>Il tuo commento<textarea id="comment" maxlength="2000" placeholder="Che cosa ti è rimasto di questo momento?">'+esc(mine?.comment||'')+'</textarea></label><label>Luogo <span class="optional">facoltativo</span><input id="editLocation" maxlength="160" value="'+esc(a.location||'')+'" data-baseline="'+esc(a.location||'')+'" placeholder="Dove eravamo?"></label></form>')+'<p class="field-help">'+(pending(a.id)?'Custodito qui, da condividere al prossimo collegamento':'Condiviso con l’altro diario')+'</p><div class="memory-footer">'+(memoryEditing?'<button class="primary" type="submit" form="ratingForm">Salva il tuo contributo</button><button class="text-button" id="cancelContribution">Annulla modifica</button>':'')+(mine?'<button class="text-button danger-button" id="clearRating">Elimina il mio voto e commento</button>':'')+'<div class="delete-memory-section"><button class="text-button danger-button" id="deleteMemory">Elimina definitivamente il ricordo</button></div></div>';
+ memoryUpload.hidden=!memoryEditing;
+ ($('memoryUploadSlot')||$('detailDialog')).append(memoryUpload);
+ if($('editContribution'))$('editContribution').onclick=()=>{memoryEditing=true;renderDetail();};
+ if($('cancelContribution'))$('cancelContribution').onclick=()=>{memoryEditing=false;renderDetail();};
  if($('clearRating'))$('clearRating').onclick=()=>confirmRemoval('Eliminare il tuo contributo?','Voto e commento dell’altra persona restano presenti.',async()=>{renderedActivity=null;await addOp('clear-rating',a.id,{});});
  $('deleteMemory').onclick=()=>{deleteMemoryId=a.id;$('deleteMemoryTitle').textContent=a.title;$('deleteMemoryDialog').showModal();};
- renderedActivity=active;if(draft&&$('comment')){$('comment').value=draft.comment;$('score').value=draft.score;}
- if($('ratingForm'))$('ratingForm').onsubmit=async e=>{e.preventDefault();const data={score:Number($('score').value),comment:$('comment').value};await withSave(e.submitter,async()=>{await addOp('rating',a.id,data);toast('Il tuo contributo è salvato');});};
+ renderedActivity=active;
+ if(draft&&$('comment')){$('comment').value=draft.comment;if($('score'))$('score').value=draft.score;$('editLocation').value=draft.location;$('editLocation').dataset.baseline=draft.baseline;}
+ if($('ratingForm'))$('ratingForm').onsubmit=async e=>{
+  e.preventDefault();const id=a.id,score=$('score')?.value??'',data={score:score===''?null:Number(score),comment:$('comment').value.trim()},location=$('editLocation').value.trim(),baseline=$('editLocation').dataset.baseline;
+  await withSave(e.submitter,async()=>{
+   if(!state.memories.some(m=>m.id===id))throw Error('Questo ricordo è stato eliminato');
+   if(data.score!==null||data.comment||mine)await addOp('rating',id,data);
+   if(location!==baseline)await addOp('memory-location',id,{location});
+   memoryEditing=false;renderedActivity=null;$('detailDialog').close();toast('Il tuo contributo è salvato');
+  });
+ };
 }
 $('mediaInput').onchange=async e=>{
  const files=[...e.target.files],target=active;e.target.value='';if(!target)return;
@@ -716,7 +766,7 @@ $('view').addEventListener('touchmove',e=>{
  const touch=e.touches[0],dx=touch.clientX-start.x,dy=touch.clientY-start.y;
  if(Math.abs(dy)>Math.abs(dx)&&!start.next){pageTouch=null;return;}
  if(Math.abs(dx)<12||Math.abs(dx)<Math.abs(dy)*1.3||Math.abs($('view').scrollTop-start.top)>12)return;
- const index=DiaryInteraction.pages.indexOf(view==='lettere'?'ricordi':view),next=DiaryInteraction.pages[index+(dx<0?1:-1)];
+ const index=DiaryInteraction.pages.indexOf(view==='lettere'?'ricordi':view==='obiettivi'?'home':view),next=DiaryInteraction.pages[index+(dx<0?1:-1)];
  if(!next)return;
  if(start.next!==next){pageGhost?.remove();pageGhost=reducedMotion()?null:pageSnapshot(next);start.next=next;}
  start.dx=Math.max(-$('pageStage').clientWidth,Math.min($('pageStage').clientWidth,dx));
