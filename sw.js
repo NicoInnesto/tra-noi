@@ -1,7 +1,7 @@
 'use strict';
-// Release 1.1 (build 45): center offline and connected status below the avatar.
-const VERSION=45,BASE=new URL('./',self.location.href),CACHE='tra-noi-pages-'+BASE.pathname+'-v45';
-const relative=['index.html?v=45','style.css?v=45','boot.js?v=45','model.js?v=45','offline.js?v=45','link.js?v=45','interaction.js?v=45','access.js?v=45','preferences.js?v=45','viewport.js?v=45','app.js?v=45','backup.js?v=45','manifest.json','manifest-one.json','manifest-two.json','icon.svg?v=45','icon-192.png?v=45','icon-512.png?v=45','apple-touch-icon.png?v=45','vendor/qrcode.js','vendor/jsqr.js','installazione.html','nuova-icona.html','manifest-icon.json'];
+// Release 1.2 (build 46): match the new icon link to the update button.
+const VERSION=46,BASE=new URL('./',self.location.href),CACHE='tra-noi-pages-'+BASE.pathname+'-v46';
+const relative=['index.html?v=46','style.css?v=46','boot.js?v=46','model.js?v=46','offline.js?v=46','link.js?v=46','interaction.js?v=46','access.js?v=46','preferences.js?v=46','viewport.js?v=46','app.js?v=46','backup.js?v=46','manifest.json','manifest-one.json','manifest-two.json','icon.svg?v=46','icon-192.png?v=46','icon-512.png?v=46','apple-touch-icon.png?v=46','vendor/qrcode.js','vendor/jsqr.js','installazione.html','nuova-icona.html','manifest-icon.json'];
 const ASSETS=relative.map(p=>new URL(p,BASE).href),SHELL=ASSETS[0];
 self.addEventListener('install',e=>e.waitUntil((async()=>{const cache=await caches.open(CACHE);await cache.addAll(ASSETS);await self.skipWaiting();})()));
 self.addEventListener('activate',e=>e.waitUntil((async()=>{for(const key of await caches.keys())if(key!==CACHE&&key.startsWith('tra-noi-pages-'+BASE.pathname+'-v'))await caches.delete(key);await self.clients.claim();})()));
