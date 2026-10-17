@@ -1,6 +1,6 @@
 'use strict';
 window.diaryBoot=window.diaryBoot||{phase:'Caricamento del diario',ready:false};
-const VERSION=37;
+const VERSION=38;
 const RELEASE='1.0';
 const WIRE_VERSION=36;
 const uuid=()=>crypto.randomUUID?crypto.randomUUID():([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g,c=>(c^crypto.getRandomValues(new Uint8Array(1))[0]&15>>c/4).toString(16));
@@ -81,7 +81,8 @@ function updateProfileMenu(){
 function showProfileSection(section){
  if(section!=='home'&&!Object.hasOwn(profileSections,section)||section==='admin'&&author!=='one')return;
  $('profileHome').hidden=section!=='home';$('profileBack').hidden=section==='home';$('profileHeading').textContent=section==='home'?'Il tuo spazio':profileSections[section][1];
- for(const panel of document.querySelectorAll('[data-profile-panel]'))panel.hidden=panel.dataset.profilePanel!==section;
+ for(const panel of document.querySelectorAll('[data-profile-panel]')){panel.hidden=panel.dataset.profilePanel!==section;if(!panel.hidden)panel.scrollTop=0;}
+ if(section==='home')$('profileHome').scrollTop=0;
  $('profileDialog').scrollTop=0;if(section==='screen')requestAnimationFrame(measureScreen);
 }
 $('profileBack').innerHTML=icon('left');$('profileBack').onclick=()=>showProfileSection('home');
@@ -149,7 +150,6 @@ function render(){
  if(oldTabs)collectionScroll.tabs=oldTabs.scrollLeft;
  if(oldChips)collectionScroll.chips=oldChips.scrollLeft;
  state=DiaryModel.project(ops);
- document.documentElement.classList.toggle('goals-mode',view==='obiettivi');
  $('profileButton').innerHTML=avatar(state.profiles[author]);updatePartnerStatus();updateProfileMenu();
  renderNavigation();
  $('view').innerHTML=({home:renderHome,ricordi:renderMemories,calendario:renderCalendar,lettere:renderLetters,countdown:renderCountdowns,giochi:renderGames,obiettivi:renderGoals}[view])();
