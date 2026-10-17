@@ -226,7 +226,7 @@ body.guide-body{height:auto;min-height:100svh;overflow:auto}.guide-page{max-widt
 .memory-cover{height:auto;aspect-ratio:4/5;flex:0 0 auto;width:100%;isolation:isolate}
 .memory-cover>img{position:absolute;inset:0;width:100%;height:100%;margin:0}
 .memory-cover>.memory-cover-backdrop{object-fit:cover;filter:blur(14px);transform:scale(1.15);opacity:.35;z-index:-1}
-.memory-cover>.memory-cover-image{object-fit:contain;object-position:center;z-index:0}
+.memory-cover>.memory-cover-image{object-fit:cover;object-position:center;z-index:0}
 .day-summary .memory-cover{aspect-ratio:auto;height:100%;width:95px}
 .memory-title-row{display:flex;align-items:flex-start;gap:12px;margin-bottom:17px}
 .memory-title-row h2{flex:1;min-width:0;margin-bottom:0}

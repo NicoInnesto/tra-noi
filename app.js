@@ -1,6 +1,6 @@
 'use strict';
 window.diaryBoot=window.diaryBoot||{phase:'Caricamento del diario',ready:false};
-const VERSION=39;
+const VERSION=40;
 const RELEASE='1.0';
 const WIRE_VERSION=39;
 const uuid=()=>crypto.randomUUID?crypto.randomUUID():([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g,c=>(c^crypto.getRandomValues(new Uint8Array(1))[0]&15>>c/4).toString(16));
@@ -55,6 +55,7 @@ let accessPolicy=null,adminVault=null,adminKey=null;
 let author=settingsStorage.getItem('diary-author');
 if(!author){author=uuid();settingsStorage.setItem('diary-author',author);}
 let myName=settingsStorage.getItem('diary-name')||'Io';
+let headerAvatarMarkup=null;
 let ops=[],acks=new Set(),active=null,db,pc,channel,role,pairId,pollTimer,sendTail=Promise.resolve(),peerName='',renderedActivity=null;
 let state,view='home',collection=null,selected='Tutti',calendarMonth=new Date(new Date().getFullYear(),new Date().getMonth(),1),calendarDay=localDay(),profileDraft='',gameDraft=null,playSession=null,activeLetterId=null;
 const transfers=new Map();
@@ -151,7 +152,7 @@ function render(){
  if(oldTabs)collectionScroll.tabs=oldTabs.scrollLeft;
  if(oldChips)collectionScroll.chips=oldChips.scrollLeft;
  state=DiaryModel.project(ops);
- $('profileButton').innerHTML=avatar(state.profiles[author]);updatePartnerStatus();updateProfileMenu();
+ const avatarMarkup=avatar(state.profiles[author]);if(avatarMarkup!==headerAvatarMarkup){$('profileButton').innerHTML=avatarMarkup;headerAvatarMarkup=avatarMarkup;}updatePartnerStatus();updateProfileMenu();
  renderNavigation();
  $('view').innerHTML=({home:renderHome,ricordi:renderMemories,calendario:renderCalendar,lettere:renderLetters,countdown:renderCountdowns,giochi:renderGames,obiettivi:renderGoals}[view])();
  const newTabs=$('view').querySelector('.collection-tabs'),newChips=$('view').querySelector('.chips');
