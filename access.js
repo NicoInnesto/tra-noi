@@ -33,6 +33,17 @@ async function unlock(password,vault,policy){
   if(!await verify(proof,await publicKey(policy.publicKey)))throw Error();return privateKey;
  }catch{throw Error('Password errata o chiave di recupero non valida');}
 }
+async function changePassword(currentPassword,newPassword,vault,policy){
+ if(typeof newPassword!=='string'||newPassword.length<10||newPassword.length>200)throw Error('Scegli una password tra 10 e 200 caratteri');
+ await unlock(currentPassword,vault,policy);
+ const oldKey=await passwordKey(currentPassword,unb64(vault.salt,24));
+ const plain=await crypto.subtle.decrypt({name:'AES-GCM',iv:unb64(vault.iv,16),additionalData:bytes(policy.id)},oldKey,unb64(vault.ciphertext));
+ const salt=crypto.getRandomValues(new Uint8Array(16)),iv=crypto.getRandomValues(new Uint8Array(12)),key=await passwordKey(newPassword,salt);
+ const ciphertext=await crypto.subtle.encrypt({name:'AES-GCM',iv,additionalData:bytes(policy.id)},key,plain);
+ const next={format:'tra-noi-admin-v1',policyId:policy.id,salt:b64(salt),iv:b64(iv),ciphertext:b64(ciphertext)};
+ await unlock(newPassword,next,policy);
+ return next;
+}
 async function authorize(op,policy){
  if(!['profile','identity'].includes(op.kind)||!policy)return;
  if(policy.legacyProfiles.some(x=>x.id===op.id&&x.hash)){
@@ -43,6 +54,6 @@ async function authorize(op,policy){
  throw Error('Questo profilo può essere modificato soltanto dall’amministratore');
 }
 async function matchPolicy(current,incoming){await checkPolicy(incoming);if(current&&canonical(current)!==canonical(incoming))throw Error('Questo diario appartiene a una coppia diversa. Importazione annullata.');return incoming;}
-root.DiaryAccess={canonical,create,unlock,sign,authorize,checkPolicy,matchPolicy};
+root.DiaryAccess={canonical,create,unlock,changePassword,sign,authorize,checkPolicy,matchPolicy};
 if(typeof module!=='undefined')module.exports=root.DiaryAccess;
 })(globalThis);

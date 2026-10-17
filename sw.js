@@ -1,7 +1,7 @@
 'use strict';
-// Release 1.0 (build 42): lower the profile and connection status without moving the title.
-const VERSION=42,BASE=new URL('./',self.location.href),CACHE='tra-noi-pages-'+BASE.pathname+'-v42';
-const relative=['index.html?v=42','style.css?v=42','boot.js?v=42','model.js?v=42','offline.js?v=42','link.js?v=42','interaction.js?v=42','access.js?v=42','preferences.js?v=42','viewport.js?v=42','app.js?v=42','backup.js?v=42','manifest.json','manifest-one.json','manifest-two.json','icon.svg?v=42','icon-192.png?v=42','icon-512.png?v=42','apple-touch-icon.png?v=42','vendor/qrcode.js','vendor/jsqr.js','installazione.html','nuova-icona.html','manifest-icon.json'];
+// Release 1.0 (build 43): change the administrator password without changing identity or permissions.
+const VERSION=43,BASE=new URL('./',self.location.href),CACHE='tra-noi-pages-'+BASE.pathname+'-v43';
+const relative=['index.html?v=43','style.css?v=43','boot.js?v=43','model.js?v=43','offline.js?v=43','link.js?v=43','interaction.js?v=43','access.js?v=43','preferences.js?v=43','viewport.js?v=43','app.js?v=43','backup.js?v=43','manifest.json','manifest-one.json','manifest-two.json','icon.svg?v=43','icon-192.png?v=43','icon-512.png?v=43','apple-touch-icon.png?v=43','vendor/qrcode.js','vendor/jsqr.js','installazione.html','nuova-icona.html','manifest-icon.json'];
 const ASSETS=relative.map(p=>new URL(p,BASE).href),SHELL=ASSETS[0];
 self.addEventListener('install',e=>e.waitUntil((async()=>{const cache=await caches.open(CACHE);await cache.addAll(ASSETS);await self.skipWaiting();})()));
 self.addEventListener('activate',e=>e.waitUntil((async()=>{for(const key of await caches.keys())if(key!==CACHE&&key.startsWith('tra-noi-pages-'+BASE.pathname+'-v'))await caches.delete(key);await self.clients.claim();})()));

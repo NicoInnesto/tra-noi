@@ -1,6 +1,6 @@
 'use strict';
 window.diaryBoot=window.diaryBoot||{phase:'Caricamento del diario',ready:false};
-const VERSION=42;
+const VERSION=43;
 const RELEASE='1.0';
 const WIRE_VERSION=39;
 const uuid=()=>crypto.randomUUID?crypto.randomUUID():([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g,c=>(c^crypto.getRandomValues(new Uint8Array(1))[0]&15>>c/4).toString(16));
@@ -688,6 +688,7 @@ function updateAdministrationUI(){
  $('setupAdministration').hidden=configured||!ownAdmin;
  $('unlockAdministration').hidden=!configured||!ownAdmin||unlocked||!adminVault;
  $('lockAdministration').hidden=!unlocked;
+ $('changeAdministrationPassword').hidden=!unlocked;
  $('recoverAdminNote').hidden=!configured||!ownAdmin||!!adminVault;
  $('partnerPhotoLabel').hidden=!unlocked;$('partnerFields').hidden=!unlocked;$('removePartnerPhoto').hidden=!unlocked||!partnerPhotoDraft;
  $('removeProfilePhoto').hidden=ownLockedPhoto();
@@ -703,19 +704,34 @@ function updateAdministrationUI(){
  $('backupHelp').textContent='Il backup completo comprende i contributi di entrambi presenti su questo iPhone e la chiave amministratore protetta dalla password. Sincronizza prima i diari, poi salva il file sul Mac. I contenuti del backup sono leggibili: conservalo come le tue foto private. Il Mac non deve restare collegato.';
  $('deviceOwner').textContent=personName()+(configured?(ownAdmin?' · Amministratore':' · Utente'):'');
 }
-$('setupAdministration').onclick=()=>{ $('accessPassword').value='';$('accessPasswordAgain').value='';$('accessConfirmLabel').hidden=false;$('accessPasswordAgain').required=true;$('accessTitle').textContent='Proteggi l’amministrazione';$('accessExplanation').textContent='Scegli una password di almeno 10 caratteri. Resterà su questo dispositivo soltanto la chiave cifrata. Conserva la password: non esiste un servizio che possa recuperarla.';$('accessForm').dataset.mode='setup';$('accessDialog').showModal();};
-$('unlockAdministration').onclick=()=>{ $('accessPassword').value='';$('accessConfirmLabel').hidden=true;$('accessPasswordAgain').required=false;$('accessTitle').textContent='Sblocca amministrazione';$('accessExplanation').textContent='Lo sblocco vale per questa apertura del diario. La password non viene inviata ad altri dispositivi.';$('accessForm').dataset.mode='unlock';$('accessDialog').showModal();};
+$('setupAdministration').onclick=()=>{ $('accessCurrentLabel').hidden=true;$('accessCurrentPassword').required=false; $('accessPassword').value='';$('accessPasswordAgain').value='';$('accessConfirmLabel').hidden=false;$('accessPasswordAgain').required=true;$('accessTitle').textContent='Proteggi l’amministrazione';$('accessExplanation').textContent='Scegli una password di almeno 10 caratteri. Resterà su questo dispositivo soltanto la chiave cifrata. Conserva la password: non esiste un servizio che possa recuperarla.';$('accessForm').dataset.mode='setup';$('accessDialog').showModal();};
+$('unlockAdministration').onclick=()=>{ $('accessCurrentLabel').hidden=true;$('accessCurrentPassword').required=false; $('accessPassword').value='';$('accessConfirmLabel').hidden=true;$('accessPasswordAgain').required=false;$('accessTitle').textContent='Sblocca amministrazione';$('accessExplanation').textContent='Lo sblocco vale per questa apertura del diario. La password non viene inviata ad altri dispositivi.';$('accessForm').dataset.mode='unlock';$('accessDialog').showModal();};
+$('changeAdministrationPassword').onclick=()=>{
+ if(author!=='one'||!adminKey||!adminVault)return;
+ $('accessPassword').value='';$('accessPasswordAgain').value='';$('accessCurrentPassword').value='';
+ $('accessCurrentLabel').hidden=false;$('accessCurrentPassword').required=true;
+ $('accessConfirmLabel').hidden=false;$('accessPasswordAgain').required=true;
+ $('accessTitle').textContent='Cambia password';
+ $('accessExplanation').textContent='Inserisci la password attuale e ripeti due volte quella nuova, di almeno 10 caratteri. Dopo il cambio prepara un nuovo backup: le copie precedenti mantengono la vecchia password.';
+ $('accessForm').dataset.mode='change';$('accessDialog').showModal();
+};
 $('lockAdministration').onclick=()=>{adminKey=null;updateAdministrationUI();toast('Amministrazione bloccata');};
 $('accessForm').onsubmit=async e=>{e.preventDefault();await withSave(e.submitter,async()=>{
- const password=$('accessPassword').value;
- if($('accessForm').dataset.mode==='setup'){
+ const password=$('accessPassword').value,changing=$('accessForm').dataset.mode==='change';
+ if(changing){
+  if(author!=='one'||!adminKey||!accessPolicy||!adminVault)throw Error('Sblocca prima l’amministrazione');
+  if(password!==$('accessPasswordAgain').value)throw Error('Le password non coincidono');
+  const nextVault=await DiaryAccess.changePassword($('accessCurrentPassword').value,password,adminVault,accessPolicy);
+  await store('meta',{id:'administration',policy:accessPolicy,vault:nextVault});
+  adminVault=nextVault;preparedBackup=null;
+ }else if($('accessForm').dataset.mode==='setup'){
   if(accessPolicy||author!=='one')throw Error('Configurazione non disponibile');
   if(password!==$('accessPasswordAgain').value)throw Error('Le password non coincidono');
   const created=await DiaryAccess.create(password,ops);
   await store('meta',{id:'administration',policy:created.policy,vault:created.vault});
   accessPolicy=created.policy;adminVault=created.vault;adminKey=created.key;closePeer();
  }else adminKey=await DiaryAccess.unlock(password,adminVault,accessPolicy);
- $('accessPassword').value='';$('accessPasswordAgain').value='';$('accessDialog').close();updateAdministrationUI();toast('Amministrazione sbloccata. Ora puoi preparare i due profili.');
+ $('accessPassword').value='';$('accessPasswordAgain').value='';$('accessCurrentPassword').value='';$('accessDialog').close();updateAdministrationUI();toast(changing?'Password aggiornata. Prepara un nuovo backup completo.':'Amministrazione sbloccata. Ora puoi preparare i due profili.');
 });};
 function renderLegacyProfiles(){
  const unresolved=[...new Set(ops.map(o=>o.author))].filter(id=>!Object.hasOwn(people,id)&&DiaryModel.resolveAuthor(id,ops)===id);
