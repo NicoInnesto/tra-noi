@@ -237,3 +237,18 @@ body.guide-body{height:auto;min-height:100svh;overflow:auto}.guide-page{max-widt
 .goals-page .goal-action svg{display:block;overflow:visible}
 .goals-page .goal-action[data-goal-edit] svg{transform:translateY(1px)}
 .goals-page .goal-actions{align-items:center}
+
+/* Compact goal groups open only when requested. */
+.goals-page .goal-section{margin:12px 0;border:1px solid var(--line);border-radius:17px;background:var(--surface);overflow:hidden}
+.goals-page .goal-section>summary{display:flex;align-items:center;gap:10px;list-style:none;margin:0;padding:17px 14px;min-height:62px;color:var(--text)}
+.goals-page .goal-section>summary::-webkit-details-marker{display:none}
+.goals-page .goal-section>summary>svg:first-child{width:20px;height:20px;color:var(--pink)}
+.goal-group-title{font:normal 21px/1.25 var(--serif);min-width:0}
+.goal-group-count{margin-left:auto;font-size:11px;color:var(--muted)}
+.goal-group-chevron{width:15px;height:15px;color:var(--muted);transition:transform .18s;flex-shrink:0}
+.goals-page .goal-section[open]>summary>.goal-group-chevron{transform:rotate(90deg)}
+.goals-page .goal-section>.goal-list{padding:0 10px 10px}
+.goals-page .goal-section>.goal-list:empty{padding:0}
+.goals-page .goal-archive .goal-section{background:var(--bg)}
+/* Move the whole header down together by only four pixels. */
+.app-header>.world-brand,.app-header>.header-actions{position:relative;top:4px}

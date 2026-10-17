@@ -1,7 +1,7 @@
 'use strict';
-// Release 1.0 (build 40): edge-to-edge covers and stable profile avatar rendering.
-const VERSION=40,BASE=new URL('./',self.location.href),CACHE='tra-noi-pages-'+BASE.pathname+'-v40';
-const relative=['index.html?v=40','style.css?v=40','boot.js?v=40','model.js?v=40','offline.js?v=40','link.js?v=40','interaction.js?v=40','access.js?v=40','preferences.js?v=40','viewport.js?v=40','app.js?v=40','backup.js?v=40','manifest.json','manifest-one.json','manifest-two.json','icon.svg?v=40','icon-192.png?v=40','icon-512.png?v=40','apple-touch-icon.png?v=40','vendor/qrcode.js','vendor/jsqr.js','installazione.html','nuova-icona.html','manifest-icon.json'];
+// Release 1.0 (build 41): collapsible goals, contextual contribution actions and a slightly lower header.
+const VERSION=41,BASE=new URL('./',self.location.href),CACHE='tra-noi-pages-'+BASE.pathname+'-v41';
+const relative=['index.html?v=41','style.css?v=41','boot.js?v=41','model.js?v=41','offline.js?v=41','link.js?v=41','interaction.js?v=41','access.js?v=41','preferences.js?v=41','viewport.js?v=41','app.js?v=41','backup.js?v=41','manifest.json','manifest-one.json','manifest-two.json','icon.svg?v=41','icon-192.png?v=41','icon-512.png?v=41','apple-touch-icon.png?v=41','vendor/qrcode.js','vendor/jsqr.js','installazione.html','nuova-icona.html','manifest-icon.json'];
 const ASSETS=relative.map(p=>new URL(p,BASE).href),SHELL=ASSETS[0];
 self.addEventListener('install',e=>e.waitUntil((async()=>{const cache=await caches.open(CACHE);await cache.addAll(ASSETS);await self.skipWaiting();})()));
 self.addEventListener('activate',e=>e.waitUntil((async()=>{for(const key of await caches.keys())if(key!==CACHE&&key.startsWith('tra-noi-pages-'+BASE.pathname+'-v'))await caches.delete(key);await self.clients.claim();})()));
