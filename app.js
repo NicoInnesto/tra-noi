@@ -1,7 +1,7 @@
 'use strict';
 window.diaryBoot=window.diaryBoot||{phase:'Caricamento del diario',ready:false};
-const VERSION=44;
-const RELEASE='1.0';
+const VERSION=45;
+const RELEASE='1.1';
 const WIRE_VERSION=39;
 const uuid=()=>crypto.randomUUID?crypto.randomUUID():([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g,c=>(c^crypto.getRandomValues(new Uint8Array(1))[0]&15>>c/4).toString(16));
 const $=id=>document.getElementById(id);
@@ -67,7 +67,7 @@ function toast(s){const host=document.querySelector('dialog[open]')||document.bo
 function displayName(person){return state?.profiles?.[person]?.nickname||nameOf(person);}
 function updatePartnerStatus(){
  const online=channel?.readyState==='open'&&!!peerPerson&&syncStarted&&!['failed','disconnected','closed'].includes(pc?.connectionState);
- $('offlineSummary').textContent=online?'Connesso con '+displayName(peerPerson):'Offline';$('partnerDot').classList.toggle('online',online);
+ $('offlineSummary').textContent=online?'Connesso con\n'+displayName(peerPerson):'Offline';$('partnerDot').classList.toggle('online',online);
 }
 let removalAction=null;
 function confirmRemoval(title,description,perform){removalAction=perform;$('manageDeleteTitle').textContent=title;$('manageDeleteDescription').textContent=description;$('manageDeleteDialog').showModal();}

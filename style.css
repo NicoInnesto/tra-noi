@@ -258,3 +258,10 @@ body.guide-body{height:auto;min-height:100svh;overflow:auto}.guide-page{max-widt
 [data-profile-panel=admin] .button-row{flex-direction:column;align-items:flex-start;gap:10px}
 [data-profile-panel=backup] .button-row{display:grid;grid-template-columns:minmax(0,1fr);gap:10px}
 [data-profile-panel=backup] .button-row>button{width:100%;margin:0}
+
+/* Center both connection states under the avatar without shifting the header. */
+.profile-corner{align-items:center;width:48px;flex:0 0 48px}
+.profile-corner .partner-status{width:84px;max-width:84px;justify-content:center;text-align:center}
+.profile-corner .partner-status i{display:none}
+.profile-corner #offlineSummary{display:block;width:100%;white-space:pre-line;overflow-wrap:anywhere}
+@media(max-width:759px){.profile-corner{width:45px;flex-basis:45px}}
