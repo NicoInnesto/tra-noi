@@ -1,7 +1,7 @@
 'use strict';
 window.diaryBoot=window.diaryBoot||{phase:'Caricamento del diario',ready:false};
-const VERSION=46;
-const RELEASE='1.2';
+const VERSION=47;
+const RELEASE='1.3';
 const WIRE_VERSION=39;
 const uuid=()=>crypto.randomUUID?crypto.randomUUID():([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g,c=>(c^crypto.getRandomValues(new Uint8Array(1))[0]&15>>c/4).toString(16));
 const $=id=>document.getElementById(id);
@@ -135,7 +135,7 @@ async function init(){
 function getActivities(){return DiaryModel.activities(ops);}
 function pending(id){return ops.some(o=>o.activity===id&&(state?.identities?.[o.author]||o.author)===author&&!acks.has(o.id));}
 function photoOf(a){return a.media.find(m=>m.type.startsWith('image/'));}
-function categoryIcon(name){return {Cinema:'film','Film a casa':'home',Ristoranti:'fork',Concerti:'music',Teatro:'sparkle'}[name]||'heart';}
+function categoryIcon(name){return {Cinema:'film','Film a casa':'home',Ristoranti:'fork','Cibi particolari':'fork',Concerti:'music',Teatro:'sparkle'}[name]||'heart';}
 function empty(title,body,button,action,ic='heart'){return '<div class="empty"><span class="tile-icon">'+icon(ic)+'</span><h2>'+title+'</h2><p>'+body+'</p>'+(button?'<button class="primary" data-action="'+action+'">'+icon('plus')+button+'</button>':'')+'</div>';}
 function collectionTile(key,wide=false){const s=sectionInfo[key],n=state.memories.filter(a=>a.section===key).length;return '<button class="collection-card tone-'+key+(wide?' wide-tile':'')+'" data-collection="'+key+'"><span class="tile-icon">'+icon(s.icon)+'</span><strong>'+s.title+'</strong><small>'+n+' '+(n===1?'ricordo':'ricordi')+'</small>'+icon('right','chevron')+'</button>';}
 function memoryCard(a){
@@ -147,6 +147,53 @@ const collectionScroll={tabs:0,chips:0};
 function collectionTabs(current){
  return '<div class="collection-tabs">'+Object.keys(sectionInfo).map(key=>'<button data-collection="'+key+'" class="'+(current===key?'active':'')+'">'+icon(sectionInfo[key].icon)+sectionInfo[key].title+'</button>').join('')+'<button data-view="lettere" class="'+(current==='lettere'?'active':'')+'">'+icon('letter')+'Pensiero</button></div>';
 }
+// Keep loaded covers attached while other memories or contributions arrive.
+let memoryPageFrame=null,renderedDetailKey='';
+function updateView(markup){
+ const root=$('view');
+ if(view==='ricordi'&&collection){
+  const template=document.createElement('template');template.innerHTML=markup;
+  const nextGrid=template.content.querySelector('.memory-grid'),grid=root.querySelector('.memory-grid');
+  if(nextGrid){
+   const cards=[...nextGrid.children];nextGrid.replaceChildren();
+   const frame=template.innerHTML;
+   if(grid&&memoryPageFrame===frame&&cards.every(n=>n.matches('.memory-card'))&&[...grid.children].every(n=>n.matches('.memory-card'))){
+    const existing=new Map([...grid.children].map(n=>[n.dataset.open,n])),keep=new Set(),nextIds=new Set(cards.map(n=>n.dataset.open));
+    for(const card of [...grid.children])if(!nextIds.has(card.dataset.open))card.remove();
+    for(const [index,next]of cards.entries()){
+     let card=existing.get(next.dataset.open);
+     if(card){
+      const cover=card.querySelector('.memory-cover'),nextCover=next.querySelector('.memory-cover');
+      if(cover.outerHTML!==nextCover.outerHTML)cover.replaceWith(nextCover);
+      const body=card.querySelector('.memory-body'),nextBody=next.querySelector('.memory-body');
+      if(body.innerHTML!==nextBody.innerHTML)body.replaceWith(nextBody);
+     }else card=next;
+     keep.add(card);
+     if(grid.children[index]!==card)grid.insertBefore(card,grid.children[index]||null);
+    }
+    for(const card of [...grid.children])if(!keep.has(card))card.remove();
+    return;
+   }
+   memoryPageFrame=frame;
+  }else memoryPageFrame=null;
+ }else memoryPageFrame=null;
+ root.innerHTML=markup;
+}
+function detailRenderKey(){
+ return JSON.stringify([active,memoryEditing,pending(active),ops.filter(o=>o.activity===active||['profile','identity'].includes(o.kind)).map(o=>o.id)]);
+}
+function refreshSyncIndicators(){
+ for(const card of $('view').querySelectorAll('.memory-card[data-open]')){
+  if(!pending(card.dataset.open))card.querySelector('.sync-pending')?.remove();
+ }
+ if(active&&$('memorySyncStatus'))$('memorySyncStatus').textContent=pending(active)?'Custodito qui, da condividere al prossimo collegamento':'Condiviso con l’altro diario';
+ if(activeLetterId&&$('letterSyncStatus'))$('letterSyncStatus').textContent=pending(activeLetterId)?'La lettera arriverà nell’altro diario quando vi collegherete.':'La lettera è stata ricevuta anche dall’altro diario.';
+}
+let syncRenderTimer=null;
+function scheduleSyncRender(){
+ if(syncRenderTimer!==null)return;
+ syncRenderTimer=setTimeout(()=>{syncRenderTimer=null;render();},100);
+}
 function render(){
  for(const panel of $('view').querySelectorAll('[data-goal-group]')){if(panel.open)goalPanelsOpen.add(panel.dataset.goalGroup);else goalPanelsOpen.delete(panel.dataset.goalGroup);}
  const oldTabs=$('view').querySelector('.collection-tabs'),oldChips=$('view').querySelector('.chips');
@@ -155,14 +202,14 @@ function render(){
  state=DiaryModel.project(ops);
  const avatarMarkup=avatar(state.profiles[author]);if(avatarMarkup!==headerAvatarMarkup){$('profileButton').innerHTML=avatarMarkup;headerAvatarMarkup=avatarMarkup;}updatePartnerStatus();updateProfileMenu();
  renderNavigation();
- $('view').innerHTML=({home:renderHome,ricordi:renderMemories,calendario:renderCalendar,lettere:renderLetters,countdown:renderCountdowns,giochi:renderGames,obiettivi:renderGoals}[view])();
+ updateView(({home:renderHome,ricordi:renderMemories,calendario:renderCalendar,lettere:renderLetters,countdown:renderCountdowns,giochi:renderGames,obiettivi:renderGoals}[view])());
  const newTabs=$('view').querySelector('.collection-tabs'),newChips=$('view').querySelector('.chips');
  if(newTabs)newTabs.scrollLeft=collectionScroll.tabs;
  if(newChips)newChips.scrollLeft=collectionScroll.chips;
  $('storage').textContent='Archivio locale: circa '+(ops.reduce((n,o)=>n+new Blob([JSON.stringify(o)]).size,0)/1024/1024).toFixed(1)+' MB. Gli originali in Foto occupano spazio separatamente.';
  tickCounter();
  if(active&&!state.memories.some(m=>m.id===active)){if($('memoryTitleDialog').open)$('memoryTitleDialog').close();if($('photoViewer').open)$('photoViewer').close();if($('detailDialog').open)$('detailDialog').close();active=null;}
- if(active)renderDetail();
+ if(active&&detailRenderKey()!==renderedDetailKey)renderDetail();
  if(playSession&&!state.games.some(g=>g.id===playSession.game.id)){$('gameDialog').close();playSession=null;}
  if(activeLetterId&&!state.letters.some(l=>l.id===activeLetterId))$('letterDialog').close();
  updateAdministrationUI();
@@ -358,7 +405,7 @@ function openNew(){
  $('dateInput').value=view==='calendario'?calendarDay:localDay();updateNewFields();$('newDialog').showModal();
 }
 function experiencePlaceholder(category){
- return {'Cinema':'Per esempio, il titolo del film','Film a casa':'Per esempio, il titolo del film','Ristoranti':'Il nome del ristorante','Concerti':'Il nome del cantante o del gruppo','Teatro':'Il nome dello spettacolo','Videogiochi':'Il titolo del videogioco','Musei':'Il nome del museo'}[category]||'Come chiamiamo questa esperienza?';
+ return {'Cinema':'Per esempio, il titolo del film','Film a casa':'Per esempio, il titolo del film','Ristoranti':'Il nome del ristorante','Cibi particolari':'Il nome del cibo o dello snack','Concerti':'Il nome del cantante o del gruppo','Teatro':'Il nome dello spettacolo','Videogiochi':'Il titolo del videogioco','Musei':'Il nome del museo'}[category]||'Come chiamiamo questa esperienza?';
 }
 function updateNewFields(){
  const s=$('sectionInput').value,undated=$('undatedInput').checked;
@@ -395,7 +442,7 @@ function renderDetail(){
  memoryUpload.remove();
  const ratings=Object.entries(a.ratings).filter(([,r])=>r.score!==null||r.comment).map(([id,r])=>'<article class="rating"><div class="rating-name">'+esc(displayName(id))+'</div>'+(r.score!==null?'<strong>'+icon('star')+' '+formatScore(r.score)+'<small> / 10</small></strong>':'')+(r.comment?'<p>'+esc(r.comment)+'</p>':'')+'</article>').join('');
  const gallery=renderMediaGallery(a);
- $('detail').innerHTML='<p class="eyebrow">'+esc(a.category)+'</p><div class="memory-title-row"><h2>'+esc(a.title)+'</h2><button class="icon-button memory-title-edit" type="button" id="editMemoryTitle" aria-label="Modifica titolo">'+icon('pencil')+'</button></div><div class="detail-meta"><span>'+esc(formatDate(a.date))+(a.endDate?' — '+esc(formatDate(a.endDate)):'')+'</span>'+(a.location?'<span class="memory-place">'+icon('pin')+esc(a.location)+'</span>':'')+(a.recipient?'<span>Ricevuto da '+esc(a.recipient)+'</span>':'')+'</div>'+(a.description?'<p class="detail-description">'+esc(a.description)+'</p>':'')+'<div class="ratings">'+ratings+'</div>'+(!memoryEditing?gallery+'<button class="secondary edit-contribution" id="editContribution">'+(mine?'Modifica il tuo contributo':'Aggiungi il tuo contributo')+'</button>':'<form id="ratingForm">'+(canRate?'<label>Il tuo voto<select id="score"><option value="">Senza voto</option>'+Array.from({length:41},(_,i)=>{const n=i/4;return '<option value="'+n+'" '+(mine?.score===n?'selected':'')+'>'+formatScore(n)+'</option>';}).join('')+'</select></label>':'')+gallery+'<div id="memoryUploadSlot"></div><label>Il tuo commento<textarea id="comment" maxlength="2000" placeholder="Che cosa ti è rimasto di questo momento?">'+esc(mine?.comment||'')+'</textarea></label><label>Luogo <span class="optional">facoltativo</span><input id="editLocation" maxlength="160" value="'+esc(a.location||'')+'" data-baseline="'+esc(a.location||'')+'" placeholder="Dove eravamo?"></label></form>')+'<p class="field-help">'+(pending(a.id)?'Custodito qui, da condividere al prossimo collegamento':'Condiviso con l’altro diario')+'</p><div class="memory-footer">'+(memoryEditing?'<button class="primary" type="submit" form="ratingForm">Salva il tuo contributo</button><button class="text-button" id="cancelContribution">Annulla modifica</button>':'')+(mine?'<button class="text-button danger-button" id="clearRating">'+(canRate?'Elimina il mio voto e commento':'Elimina il mio commento')+'</button>':'')+'<div class="delete-memory-section"><button class="text-button danger-button" id="deleteMemory">Elimina definitivamente il ricordo</button></div></div>';
+ $('detail').innerHTML='<p class="eyebrow">'+esc(a.category)+'</p><div class="memory-title-row"><h2>'+esc(a.title)+'</h2><button class="icon-button memory-title-edit" type="button" id="editMemoryTitle" aria-label="Modifica titolo">'+icon('pencil')+'</button></div><div class="detail-meta"><span>'+esc(formatDate(a.date))+(a.endDate?' — '+esc(formatDate(a.endDate)):'')+'</span>'+(a.location?'<span class="memory-place">'+icon('pin')+esc(a.location)+'</span>':'')+(a.recipient?'<span>Ricevuto da '+esc(a.recipient)+'</span>':'')+'</div>'+(a.description?'<p class="detail-description">'+esc(a.description)+'</p>':'')+'<div class="ratings">'+ratings+'</div>'+(!memoryEditing?gallery+'<button class="secondary edit-contribution" id="editContribution">'+(mine?'Modifica il tuo contributo':'Aggiungi il tuo contributo')+'</button>':'<form id="ratingForm">'+(canRate?'<label>Il tuo voto<select id="score"><option value="">Senza voto</option>'+Array.from({length:41},(_,i)=>{const n=i/4;return '<option value="'+n+'" '+(mine?.score===n?'selected':'')+'>'+formatScore(n)+'</option>';}).join('')+'</select></label>':'')+gallery+'<div id="memoryUploadSlot"></div><label>Il tuo commento<textarea id="comment" maxlength="2000" placeholder="Che cosa ti è rimasto di questo momento?">'+esc(mine?.comment||'')+'</textarea></label><label>Luogo <span class="optional">facoltativo</span><input id="editLocation" maxlength="160" value="'+esc(a.location||'')+'" data-baseline="'+esc(a.location||'')+'" placeholder="Dove eravamo?"></label></form>')+'<p id="memorySyncStatus" class="field-help">'+(pending(a.id)?'Custodito qui, da condividere al prossimo collegamento':'Condiviso con l’altro diario')+'</p><div class="memory-footer">'+(memoryEditing?'<button class="primary" type="submit" form="ratingForm">Salva il tuo contributo</button><button class="text-button" id="cancelContribution">Annulla modifica</button>':'')+(mine?'<button class="text-button danger-button" id="clearRating">'+(canRate?'Elimina il mio voto e commento':'Elimina il mio commento')+'</button>':'')+'<div class="delete-memory-section"><button class="text-button danger-button" id="deleteMemory">Elimina definitivamente il ricordo</button></div></div>';
  memoryUpload.hidden=!memoryEditing;
  ($('memoryUploadSlot')||$('detailDialog')).append(memoryUpload);
  if($('editContribution'))$('editContribution').onclick=()=>{memoryEditing=true;renderDetail();};
@@ -403,7 +450,7 @@ function renderDetail(){
  if($('clearRating'))$('clearRating').onclick=()=>confirmRemoval('Eliminare il tuo contributo?',canRate?'Voto e commento dell’altra persona restano presenti.':'Il commento dell’altra persona resta presente.',async()=>{renderedActivity=null;await addOp('clear-rating',a.id,{});});
  $('editMemoryTitle').onclick=()=>{memoryTitleTarget=a.id;$('memoryTitleInput').value=a.title;$('memoryTitleDialog').showModal();};
  $('deleteMemory').onclick=()=>{deleteMemoryId=a.id;$('deleteMemoryTitle').textContent=a.title;$('deleteMemoryDialog').showModal();};
- renderedActivity=active;
+ renderedActivity=active;renderedDetailKey=detailRenderKey();
  if(draft&&$('comment')){$('comment').value=draft.comment;if($('score'))$('score').value=draft.score;$('editLocation').value=draft.location;$('editLocation').dataset.baseline=draft.baseline;}
  if($('ratingForm'))$('ratingForm').onsubmit=async e=>{
   e.preventDefault();const id=a.id,score=$('score')?.value??'',data={score:score===''?null:Number(score),comment:$('comment').value.trim()},location=$('editLocation').value.trim(),baseline=$('editLocation').dataset.baseline;
@@ -474,8 +521,8 @@ async function receiveFrame(raw){
   return;
  }
  if(!peerPerson)throw Error('I profili non sono ancora stati verificati');
- if(message.type==='op'){const op=message.op;validateOp(op);await DiaryAccess.authorize(op,accessPolicy);if(!ops.some(o=>o.id===op.id)){await mergeOperations([op]);render();}await send({type:'ack',id:op.id});}
- if(message.type==='ack'&&ops.some(o=>o.id===message.id)){await store('acks',{id:message.id});acks.add(message.id);render();}
+ if(message.type==='op'){const op=message.op;validateOp(op);await DiaryAccess.authorize(op,accessPolicy);if(!ops.some(o=>o.id===op.id)){await mergeOperations([op]);scheduleSyncRender();}await send({type:'ack',id:op.id});}
+ if(message.type==='ack'&&!acks.has(message.id)&&ops.some(o=>o.id===message.id)){await store('acks',{id:message.id});acks.add(message.id);refreshSyncIndicators();}
  if(message.type==='sync-done')connection('Collegato con '+peerName+' · ricordi ricevuti',true);
 }
 async function description(current=pc){if(!current||current!==pc)throw Error('Tentativo annullato');if(current.iceGatheringState!=='complete')await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('La rete non consente di preparare il collegamento')),12000);const listener=()=>{if(current!==pc){clearTimeout(timer);current.removeEventListener('icegatheringstatechange',listener);reject(Error('Tentativo annullato'));}else if(current.iceGatheringState==='complete'){clearTimeout(timer);current.removeEventListener('icegatheringstatechange',listener);resolve();}};current.addEventListener('icegatheringstatechange',listener);listener();});if(current!==pc)throw Error('Tentativo annullato');return current.localDescription.toJSON();}
@@ -553,7 +600,7 @@ $('coverInput').onchange=async e=>{const f=e.target.files[0];e.target.value='';i
 function openLetter(id){
  activeLetterId=id||null;
  const l=state.letters.find(l=>l.id===id);
- $('letterContent').innerHTML=l?'<p class="letter-date">'+new Date(l.time).toLocaleDateString('it-IT',{day:'numeric',month:'long',year:'numeric'})+'</p><h2>'+esc(l.title)+'</h2><div class="letter-body">'+esc(l.body)+'</div><p class="letter-signature">'+esc(nameOf(l.author,l.name))+'</p><p class="field-help">'+(pending(l.id)?'La lettera arriverà nell’altro diario quando vi collegherete.':'La lettera è stata ricevuta anche dall’altro diario.')+'</p>':'<h2>Una lettera per te</h2><p class="muted">Scrivi quello che ti va di lasciare all’altro. Lo ritroverete qui, anche fra tanto tempo.</p><form id="letterForm"><label>Titolo<input id="letterTitle" required maxlength="120" placeholder="Una cosa che volevo dirti…"></label><label>Le tue parole<textarea id="letterBody" required maxlength="20000" rows="9" placeholder="Caro amore,"></textarea></label><p class="field-help">Si salva qui. Arriverà anche nell’altro diario al prossimo collegamento.</p><button class="primary" type="submit">Lascia la tua lettera</button></form>';
+ $('letterContent').innerHTML=l?'<p class="letter-date">'+new Date(l.time).toLocaleDateString('it-IT',{day:'numeric',month:'long',year:'numeric'})+'</p><h2>'+esc(l.title)+'</h2><div class="letter-body">'+esc(l.body)+'</div><p class="letter-signature">'+esc(nameOf(l.author,l.name))+'</p><p id="letterSyncStatus" class="field-help">'+(pending(l.id)?'La lettera arriverà nell’altro diario quando vi collegherete.':'La lettera è stata ricevuta anche dall’altro diario.')+'</p>':'<h2>Una lettera per te</h2><p class="muted">Scrivi quello che ti va di lasciare all’altro. Lo ritroverete qui, anche fra tanto tempo.</p><form id="letterForm"><label>Titolo<input id="letterTitle" required maxlength="120" placeholder="Una cosa che volevo dirti…"></label><label>Le tue parole<textarea id="letterBody" required maxlength="20000" rows="9" placeholder="Caro amore,"></textarea></label><p class="field-help">Si salva qui. Arriverà anche nell’altro diario al prossimo collegamento.</p><button class="primary" type="submit">Lascia la tua lettera</button></form>';
  if(l&&l.author===author){$('letterContent').insertAdjacentHTML('beforeend','<button class="text-button danger-button" id="deleteLetter">Elimina la mia lettera</button>');$('deleteLetter').onclick=()=>confirmRemoval('Eliminare questa lettera?','La lettera verrà eliminata anche dall’altro diario al prossimo collegamento. I backup già esportati restano invariati.',async()=>{await addOp('delete-letter',l.id,{});$('letterDialog').close();});}
  if(!l)$('letterForm').onsubmit=async e=>{e.preventDefault();const title=$('letterTitle').value.trim(),body=$('letterBody').value.trim();if(!title||!body)return;await withSave(e.submitter,async()=>{await addOp('letter',uuid(),{title,body});$('letterDialog').close();navigate('lettere');toast('Le tue parole sono al sicuro qui');});};
  $('letterDialog').showModal();
