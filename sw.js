@@ -1,7 +1,7 @@
 'use strict';
-// Release 1.3 (build 47): preserve loaded memory covers during sync and add Cibi particolari.
-const VERSION=47,BASE=new URL('./',self.location.href),CACHE='tra-noi-pages-'+BASE.pathname+'-v47';
-const relative=['index.html?v=47','style.css?v=47','boot.js?v=47','model.js?v=47','offline.js?v=47','link.js?v=47','interaction.js?v=47','access.js?v=47','preferences.js?v=47','viewport.js?v=47','app.js?v=47','backup.js?v=47','manifest.json','manifest-one.json','manifest-two.json','icon.svg?v=47','icon-192.png?v=47','icon-512.png?v=47','apple-touch-icon.png?v=47','vendor/qrcode.js','vendor/jsqr.js','installazione.html','nuova-icona.html','manifest-icon.json'];
+// Release 1.4 (build 48): keep receiving during outgoing sync and reset stalled channel queues.
+const VERSION=48,BASE=new URL('./',self.location.href),CACHE='tra-noi-pages-'+BASE.pathname+'-v48';
+const relative=['index.html?v=48','style.css?v=48','boot.js?v=48','model.js?v=48','offline.js?v=48','link.js?v=48','interaction.js?v=48','access.js?v=48','preferences.js?v=48','viewport.js?v=48','app.js?v=48','backup.js?v=48','manifest.json','manifest-one.json','manifest-two.json','icon.svg?v=48','icon-192.png?v=48','icon-512.png?v=48','apple-touch-icon.png?v=48','vendor/qrcode.js','vendor/jsqr.js','installazione.html','nuova-icona.html','manifest-icon.json'];
 const ASSETS=relative.map(p=>new URL(p,BASE).href),SHELL=ASSETS[0];
 self.addEventListener('install',e=>e.waitUntil((async()=>{const cache=await caches.open(CACHE);await cache.addAll(ASSETS);await self.skipWaiting();})()));
 self.addEventListener('activate',e=>e.waitUntil((async()=>{for(const key of await caches.keys())if(key!==CACHE&&key.startsWith('tra-noi-pages-'+BASE.pathname+'-v'))await caches.delete(key);await self.clients.claim();})()));
