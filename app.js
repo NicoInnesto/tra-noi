@@ -1,8 +1,8 @@
 'use strict';
 window.diaryBoot=window.diaryBoot||{phase:'Caricamento del diario',ready:false};
-const VERSION=48;
-const RELEASE='1.4';
-const WIRE_VERSION=39;
+const VERSION=49;
+const RELEASE='1.5';
+const WIRE_VERSION=40;
 const uuid=()=>crypto.randomUUID?crypto.randomUUID():([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g,c=>(c^crypto.getRandomValues(new Uint8Array(1))[0]&15>>c/4).toString(16));
 const $=id=>document.getElementById(id);
 const storagePrefix='tra-noi:'+new URL('./',location.href).pathname+':';
@@ -481,11 +481,11 @@ async function addOp(kind,activity,data,opAuthor=author){
  const time=ops.reduce((n,o)=>Math.max(n,o.time+1),Date.now()),op={id:uuid(),kind,activity,data,author:opAuthor,name:personName(opAuthor),time};validateOp(op);
  if(['profile','identity'].includes(kind)){op.actor=author;if(author==='one'&&accessPolicy){if(!adminKey)throw Error('Sblocca prima l’amministrazione');Object.assign(op,await DiaryAccess.sign(op,adminKey));}if(author==='two'&&(opAuthor!=='two'||kind==='identity'))throw Error('Puoi modificare soltanto il tuo profilo');}
  await DiaryAccess.authorize(op,accessPolicy);
- try{await mergeOperations([op]);render();if(channel?.readyState==='open'&&peerPerson&&syncStarted)send({type:'op',op}).catch(()=>toast('Trasferimento interrotto: il contenuto resta qui'));}catch(e){throw Error('Salvataggio non riuscito. Controlla lo spazio disponibile.');}
+ try{await mergeOperations([op]);render();if(channel?.readyState==='open'&&peerPerson&&syncStarted){const current=channel;sendOperation(op,current).catch(error=>transferError(current,error));}}catch(e){throw Error('Salvataggio non riuscito. Controlla lo spazio disponibile.');}
 }
 function validateOp(op){return DiaryModel.validateOp(op);}
 function connection(status,online=false){$('connection').textContent=status;$('dot').classList.toggle('online',online);$('pairStatus').textContent=status;updatePartnerStatus();}
-function closePeer(){peerPerson='';syncStarted=false;clearTimeout(channel?.helloTimer);clearInterval(pollTimer);clearInterval(diagnosticTimer);pollTimer=null;const oldChannel=channel,oldPeer=pc;pc=null;channel=null;pairId=null;peerName='';$('pairCode').textContent='';if(oldChannel){oldChannel.onopen=null;oldChannel.onclose=null;oldChannel.onmessage=null;oldChannel.close();}if(oldPeer){oldPeer.ondatachannel=null;oldPeer.onconnectionstatechange=null;oldPeer.oniceconnectionstatechange=null;oldPeer.close();}transfers.clear();connection('Account non collegato');}
+function closePeer(){peerPerson='';syncStarted=false;clearTimeout(channel?.helloTimer);clearInterval(pollTimer);clearInterval(diagnosticTimer);pollTimer=null;const oldChannel=channel,oldPeer=pc;pc=null;channel=null;pairId=null;peerName='';$('pairCode').textContent='';if(oldChannel){settleTransfers(oldChannel);oldChannel.onopen=null;oldChannel.onclose=null;oldChannel.onmessage=null;oldChannel.close();}if(oldPeer){oldPeer.ondatachannel=null;oldPeer.onconnectionstatechange=null;oldPeer.oniceconnectionstatechange=null;oldPeer.close();}transfers.clear();connection('Account non collegato');}
 function reportDiagnostic(stage){
  const node=$('connectionDebug');if(!node)return;
  const count=s=>(s||'').split('\n').filter(line=>line.startsWith('a=candidate:')).length;
@@ -495,7 +495,7 @@ function reportStats(){reportDiagnostic('controllo locale');}
 function makePeer(){closePeer();if(!window.RTCPeerConnection)throw Error('Questo browser non supporta il collegamento. Usa Safari aggiornato.');const created=new RTCPeerConnection({iceServers:localIceServers});pc=created;created.ondatachannel=e=>{if(pc===created)bindChannel(e.channel);};created.onconnectionstatechange=()=>{if(pc!==created)return;reportDiagnostic('connection');updatePartnerStatus();if(created.connectionState==='failed')connection('Connessione diretta non riuscita · i ricordi restano qui');else if(created.connectionState==='disconnected')connection('Connessione in pausa · tentativo di ripresa…');};created.oniceconnectionstatechange=()=>{if(pc===created)reportDiagnostic('ice');};created.onicecandidateerror=e=>{if(pc===created)reportDiagnostic('candidate-error',{code:e.errorCode,message:e.errorText});};diagnosticTimer=setInterval(reportStats,5000);reportDiagnostic('start');return created;}
 function transferError(current,error){
  if(channel!==current||current?.readyState!=='open'||current.transferFailed)return;
- current.transferFailed=true;syncStarted=false;
+ current.transferFailed=true;syncStarted=false;settleTransfers(current);
  connection('Scambio interrotto: '+error.message+'. Ricollega gli account per riprovare.');
  toast('Scambio non completato. I contenuti restano salvati su questo dispositivo.');
 }
@@ -503,18 +503,61 @@ function sendInBackground(payload){
  const current=channel;send(payload).catch(error=>transferError(current,error));
 }
 function bindChannel(c){
- channel=c;peerPerson='';syncStarted=false;sendTail=Promise.resolve();c.transferFailed=false;c.bufferedAmountLowThreshold=65536;
- c.onopen=async()=>{if(channel!==c)return;reportDiagnostic('channel-open');clearInterval(pollTimer);connection('Verifica dei due profili…',true);try{await send({type:'hello',protocol:WIRE_VERSION,person:author,name:personName(),ticket:sessionTicket,policy:accessPolicy});c.helloTimer=setTimeout(()=>{if(channel===c&&!peerPerson){closePeer();connection('Aggiorna l’app su entrambi i dispositivi e riprova');}},10000);}catch{connection('Trasferimento interrotto');}};
- c.onclose=()=>{clearTimeout(c.helloTimer);if(channel===c){syncStarted=false;reportDiagnostic('channel-closed');connection('Account non collegato');}};
- let receive=Promise.resolve();c.onmessage=e=>{receive=receive.then(()=>{if(channel===c)return receiveFrame(e.data);}).catch(err=>toast('Ricezione non completata: '+err.message));};
+ channel=c;peerPerson='';syncStarted=false;sendTail=Promise.resolve();c.pendingAcks=new Map();c.inflight=new Map();c.peerIds=new Set();c.sentSnapshot=false;c.receivedSnapshot=false;c.verified=false;c.checkKey=null;c.peerCheck=null;c.transferFailed=false;c.bufferedAmountLowThreshold=65536;
+ c.onopen=async()=>{if(channel!==c)return;reportDiagnostic('channel-open');clearInterval(pollTimer);connection('Verifica dei due profili…',true);try{await send({type:'hello',protocol:WIRE_VERSION,person:author,name:personName(),ticket:sessionTicket,policy:accessPolicy,inventory:operationIds()});c.helloTimer=setTimeout(()=>{if(channel===c&&!peerPerson){closePeer();connection('Aggiorna l’app su entrambi i dispositivi e riprova');}},10000);}catch{connection('Trasferimento interrotto');}};
+ c.onclose=()=>{settleTransfers(c);clearTimeout(c.helloTimer);if(channel===c){syncStarted=false;reportDiagnostic('channel-closed');connection(c.verified?'Account non collegato · ultimo scambio completato':'Collegamento interrotto · scambio incompleto, ricollega gli account');}};
+ let receive=Promise.resolve();c.onmessage=e=>{receive=receive.then(()=>{if(channel===c)return receiveFrame(e.data);}).catch(err=>transferError(c,Error('Ricezione non completata: '+err.message)));};
+}
+function operationIds(){return ops.map(o=>o.id).sort();}
+function validInventory(ids){return Array.isArray(ids)&&ids.length<=200000&&ids.every(id=>typeof id==='string'&&id.length>0&&id.length<=120)&&new Set(ids).size===ids.length;}
+function settleTransfers(c){
+ for(const entry of c?.pendingAcks?.values()||[]){clearTimeout(entry.timer);entry.resolve(false);}
+ c?.pendingAcks?.clear();clearTimeout(c?.verifyTimer);
+}
+function invalidateSync(c){
+ c.verified=false;c.checkKey=null;clearTimeout(c.verifyTimer);
+ connection('Scambio in corso · attendi la verifica finale',true);
+}
+function sendOperation(op,c=channel){
+ if(c.inflight.has(op.id))return c.inflight.get(op.id);
+ invalidateSync(c);
+ const task=(async()=>{
+  for(let attempt=0;attempt<3;attempt++){
+   if(channel!==c||c.readyState!=='open'||c.transferFailed)throw Error('Collegamento interrotto');
+   let entry;const confirmed=new Promise(resolve=>{entry={resolve,timer:null};});
+   c.pendingAcks.set(op.id,entry);
+   try{
+    await send({type:'op',op});
+    if(c.pendingAcks.get(op.id)===entry)entry.timer=setTimeout(()=>entry.resolve(false),15000);
+    if(await confirmed)return;
+   }finally{clearTimeout(entry.timer);if(c.pendingAcks.get(op.id)===entry)c.pendingAcks.delete(op.id);}
+  }
+  throw Error('Manca la conferma di salvataggio di un contenuto');
+ })();
+ c.inflight.set(op.id,task);
+ const finished=()=>{c.inflight.delete(op.id);verifySync(c);};
+ task.then(finished,()=>c.inflight.delete(op.id));
+ return task;
+}
+function verifySync(c){
+ if(channel!==c||c.transferFailed||!c.sentSnapshot||!c.receivedSnapshot||c.inflight.size)return;
+ const ids=operationIds(),key=ids.join('\n');
+ if(c.peerCheck?.join('\n')===key)sendInBackground({type:'sync-check-ok',ids});
+ if(c.checkKey===key)return;
+ c.checkKey=key;
+ sendInBackground({type:'sync-check',ids});
+ clearTimeout(c.verifyTimer);
+ c.verifyTimer=setTimeout(()=>transferError(c,Error('Verifica finale non completata. Alcuni contenuti potrebbero mancare')),15000);
 }
 async function syncSnapshot(){
  if(syncStarted||!peerPerson)return;syncStarted=true;updatePartnerStatus();
- connection('Scambio dei contenuti in corso…',true);
- const current=channel,snapshot=[...ops].sort((a,b)=>Number(a.kind==='media')-Number(b.kind==='media'));
- for(const op of snapshot){if(current!==channel)throw Error('Collegamento sostituito');await send({type:'op',op});}
+ connection('Scambio dei contenuti mancanti in corso…',true);
+ const current=channel,snapshot=[...ops].filter(o=>!current.peerIds.has(o.id)).sort((a,b)=>Number(a.kind==='media')-Number(b.kind==='media'));
+ for(const op of snapshot){if(current!==channel)throw Error('Collegamento sostituito');await sendOperation(op,current);}
  if(current!==channel)throw Error('Collegamento sostituito');
+ current.sentSnapshot=true;
  await send({type:'sync-done'});
+ verifySync(current);
 }
 async function send(payload){const current=channel;const task=async()=>{const value=JSON.stringify(payload),id=uuid(),count=Math.ceil(value.length/12000);for(let i=0;i<count;i++){if(current!==channel||current?.readyState!=='open')throw Error('Collegamento chiuso');const waiting=Date.now();while(current.bufferedAmount>262144){await new Promise(r=>setTimeout(r,20));if(current!==channel||current.readyState!=='open')throw Error('Collegamento chiuso');if(Date.now()-waiting>30000)throw Error('Trasferimento fermo da troppo tempo');}current.send(JSON.stringify({id,i,count,chunk:value.slice(i*12000,(i+1)*12000)}));}};const result=sendTail.then(task);sendTail=result.catch(()=>{});return result;}
 async function receiveFrame(raw){
@@ -525,18 +568,37 @@ async function receiveFrame(raw){
  if(message.type==='hello'||message.type==='hello-ok'){
   if(message.protocol!==WIRE_VERSION||message.ticket!==sessionTicket||!sessionTicket||!Object.hasOwn(people,message.person)){closePeer();connection('Aggiorna l’app su entrambi i dispositivi prima di collegarli');return;}
   if(message.person===author){closePeer();connection('Entrambi i dispositivi sono di '+personName()+'. Assegna Persona 1 a un dispositivo e Persona 2 all’altro.');return;}
+  if(!validInventory(message.inventory))throw Error('Elenco dei contenuti non valido');
+  channel.peerIds=new Set(message.inventory);
   if(message.policy)await adoptPolicy(message.policy);
   peerPerson=message.person;peerName=message.name||personName(peerPerson);clearTimeout(channel.helloTimer);
   await store('meta',{id:'partner',person:peerPerson});connection('Collegato con '+peerName,true);
-  if(message.type==='hello')sendInBackground({type:'hello-ok',protocol:WIRE_VERSION,person:author,ticket:sessionTicket,policy:accessPolicy});
+  if(message.type==='hello')sendInBackground({type:'hello-ok',protocol:WIRE_VERSION,person:author,ticket:sessionTicket,policy:accessPolicy,inventory:operationIds()});
   // Never hold the receive queue while sending a snapshot or acknowledgements.
   const current=channel;syncSnapshot().catch(error=>transferError(current,error));
   return;
  }
  if(!peerPerson)throw Error('I profili non sono ancora stati verificati');
- if(message.type==='op'){const op=message.op;validateOp(op);await DiaryAccess.authorize(op,accessPolicy);if(!ops.some(o=>o.id===op.id)){await mergeOperations([op]);scheduleSyncRender();}sendInBackground({type:'ack',id:op.id});}
- if(message.type==='ack'&&!acks.has(message.id)&&ops.some(o=>o.id===message.id)){await store('acks',{id:message.id});acks.add(message.id);refreshSyncIndicators();}
- if(message.type==='sync-done')connection('Collegato con '+peerName+' · ricordi ricevuti',true);
+ if(message.type==='op'){const op=message.op;validateOp(op);await DiaryAccess.authorize(op,accessPolicy);if(!ops.some(o=>o.id===op.id)){await mergeOperations([op]);invalidateSync(channel);scheduleSyncRender();}sendInBackground({type:'ack',id:op.id});}
+ if(message.type==='ack'){
+  if(!acks.has(message.id)&&ops.some(o=>o.id===message.id)){await store('acks',{id:message.id});acks.add(message.id);refreshSyncIndicators();}
+  const entry=channel.pendingAcks.get(message.id);
+  if(entry){channel.pendingAcks.delete(message.id);clearTimeout(entry.timer);entry.resolve(true);}
+ }
+ if(message.type==='sync-done'){channel.receivedSnapshot=true;verifySync(channel);}
+ if(message.type==='sync-check'){
+  if(!validInventory(message.ids))throw Error('Verifica dei contenuti non valida');
+  channel.peerCheck=[...message.ids].sort();verifySync(channel);
+ }
+ if(message.type==='sync-check-ok'){
+  if(!validInventory(message.ids))throw Error('Conferma dei contenuti non valida');
+  const key=[...message.ids].sort().join('\n');
+  if(channel.sentSnapshot&&channel.receivedSnapshot&&!channel.inflight.size&&key===channel.checkKey&&key===operationIds().join('\n')&&!channel.transferFailed){
+   channel.verified=true;clearTimeout(channel.verifyTimer);
+   connection('Scambio completato · contenuti verificati su entrambi i dispositivi',true);
+   refreshSyncIndicators();
+  }
+ }
 }
 async function description(current=pc){if(!current||current!==pc)throw Error('Tentativo annullato');if(current.iceGatheringState!=='complete')await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('La rete non consente di preparare il collegamento')),12000);const listener=()=>{if(current!==pc){clearTimeout(timer);current.removeEventListener('icegatheringstatechange',listener);reject(Error('Tentativo annullato'));}else if(current.iceGatheringState==='complete'){clearTimeout(timer);current.removeEventListener('icegatheringstatechange',listener);resolve();}};current.addEventListener('icegatheringstatechange',listener);listener();});if(current!==pc)throw Error('Tentativo annullato');return current.localDescription.toJSON();}
 function saveName(){if(!Object.hasOwn(people,author))throw Error('Scegli prima il profilo del dispositivo');myName=personName();}

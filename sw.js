@@ -1,7 +1,7 @@
 'use strict';
-// Release 1.4 (build 48): keep receiving during outgoing sync and reset stalled channel queues.
-const VERSION=48,BASE=new URL('./',self.location.href),CACHE='tra-noi-pages-'+BASE.pathname+'-v48';
-const relative=['index.html?v=48','style.css?v=48','boot.js?v=48','model.js?v=48','offline.js?v=48','link.js?v=48','interaction.js?v=48','access.js?v=48','preferences.js?v=48','viewport.js?v=48','app.js?v=48','backup.js?v=48','manifest.json','manifest-one.json','manifest-two.json','icon.svg?v=48','icon-192.png?v=48','icon-512.png?v=48','apple-touch-icon.png?v=48','vendor/qrcode.js','vendor/jsqr.js','installazione.html','nuova-icona.html','manifest-icon.json'];
+// Release 1.5 (build 49): exchange missing operations with durable acknowledgements, retries and archive verification.
+const VERSION=49,BASE=new URL('./',self.location.href),CACHE='tra-noi-pages-'+BASE.pathname+'-v49';
+const relative=['index.html?v=49','style.css?v=49','boot.js?v=49','model.js?v=49','offline.js?v=49','link.js?v=49','interaction.js?v=49','access.js?v=49','preferences.js?v=49','viewport.js?v=49','app.js?v=49','backup.js?v=49','manifest.json','manifest-one.json','manifest-two.json','icon.svg?v=49','icon-192.png?v=49','icon-512.png?v=49','apple-touch-icon.png?v=49','vendor/qrcode.js','vendor/jsqr.js','installazione.html','nuova-icona.html','manifest-icon.json'];
 const ASSETS=relative.map(p=>new URL(p,BASE).href),SHELL=ASSETS[0];
 self.addEventListener('install',e=>e.waitUntil((async()=>{const cache=await caches.open(CACHE);await cache.addAll(ASSETS);await self.skipWaiting();})()));
 self.addEventListener('activate',e=>e.waitUntil((async()=>{for(const key of await caches.keys())if(key!==CACHE&&key.startsWith('tra-noi-pages-'+BASE.pathname+'-v'))await caches.delete(key);await self.clients.claim();})()));
