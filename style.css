@@ -268,3 +268,9 @@ body.guide-body{height:auto;min-height:100svh;overflow:auto}.guide-page{max-widt
 
 .updates-actions{display:flex;flex-direction:column;align-items:stretch;gap:10px;width:max-content;max-width:100%}
 .updates-actions>.secondary{width:100%;text-align:center;text-decoration:none}
+
+/* Composite moving pages only while a gesture or transition is active. */
+.page-in-motion>#view,.page-in-motion>.page-snapshot{will-change:transform,opacity}
+.nav-bubble{transition:transform .22s cubic-bezier(.2,.8,.2,1),width .18s,border-radius .14s,box-shadow .14s}
+.bottom-nav button{transition:color .12s,transform .14s}
+@media(prefers-reduced-motion:reduce){.nav-bubble,.bottom-nav button{transition:none}}
