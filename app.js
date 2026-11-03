@@ -1,8 +1,8 @@
 'use strict';
 window.diaryBoot=window.diaryBoot||{phase:'Caricamento del diario',ready:false};
-const VERSION=50;
-const RELEASE='1.6';
-const WIRE_VERSION=40;
+const VERSION=51;
+const RELEASE='1.7';
+const WIRE_VERSION=41;
 const uuid=()=>crypto.randomUUID?crypto.randomUUID():([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g,c=>(c^crypto.getRandomValues(new Uint8Array(1))[0]&15>>c/4).toString(16));
 const $=id=>document.getElementById(id);
 const storagePrefix='tra-noi:'+new URL('./',location.href).pathname+':';
@@ -126,7 +126,7 @@ async function init(){
  const request=requestedPerson();
  if(Object.hasOwn(people,savedPerson)){author=savedPerson;myName=personName();profileMismatch=!!request&&request!==author;setInstallManifest();}
  else if(request)await choosePerson(request);
- currentState();view=['home','ricordi','calendario','obiettivi','lettere','countdown','giochi'].includes(location.hash.slice(1))?location.hash.slice(1):'home';
+ currentState();view=['home','ricordi','calendario','obiettivi','lettere','countdown','giochi','posti'].includes(location.hash.slice(1))?location.hash.slice(1):'home';
  window.diaryBoot.phase='Diario pronto';window.diaryBoot.ready=true;$('bootStatus').hidden=true;render();reportDiagnostic('page-ready',{version:VERSION});
  if(!window.isSecureContext)$('trialNote').hidden=false;
  DiaryOffline.start();updateInstallUI();
@@ -213,13 +213,16 @@ function updateStorageUsage(){
 }
 function render(){
  for(const panel of $('view').querySelectorAll('[data-goal-group]')){if(panel.open)goalPanelsOpen.add(panel.dataset.goalGroup);else goalPanelsOpen.delete(panel.dataset.goalGroup);}
+ const placesScroll=$('view').querySelector('[data-places-feed]')?.scrollTop||0;
  const oldTabs=$('view').querySelector('.collection-tabs'),oldChips=$('view').querySelector('.chips');
  if(oldTabs)collectionScroll.tabs=oldTabs.scrollLeft;
  if(oldChips)collectionScroll.chips=oldChips.scrollLeft;
  currentState();
  const avatarMarkup=avatar(state.profiles[author]);if(avatarMarkup!==headerAvatarMarkup){$('profileButton').innerHTML=avatarMarkup;headerAvatarMarkup=avatarMarkup;}updatePartnerStatus();if($('profileDialog').open||!$('profileMenu').children.length)updateProfileMenu();
  renderNavigation();
- updateView(({home:renderHome,ricordi:renderMemories,calendario:renderCalendar,lettere:renderLetters,countdown:renderCountdowns,giochi:renderGames,obiettivi:renderGoals}[view])());
+ updateView(({home:renderHome,ricordi:renderMemories,calendario:renderCalendar,lettere:renderLetters,countdown:renderCountdowns,giochi:renderGames,obiettivi:renderGoals,posti:renderPlaces}[view])());
+ const placesFeed=$('view').querySelector('[data-places-feed]');if(placesFeed)placesFeed.scrollTop=placesScroll;
+ if($('placeDetailDialog').open)refreshPlacesDetail();
  const newTabs=$('view').querySelector('.collection-tabs'),newChips=$('view').querySelector('.chips');
  if(newTabs)newTabs.scrollLeft=collectionScroll.tabs;
  if(newChips)newChips.scrollLeft=collectionScroll.chips;
@@ -235,7 +238,7 @@ function render(){
 }
 function renderHome(){
  const date=state.settings.anniversaryStart?.date||state.settings.anniversary||'',upcomingCount=state.countdowns.filter(c=>DiaryInteraction.countdownDays(c.date)>=0).length;
- return '<div class="home-topline"><span>'+esc(capitalize(new Date().toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long'})))+'</span><span>'+icon('lock')+'Il nostro spazio</span></div><div class="home-layout"><div><section class="hero">'+(state.settings.cover?'<img class="hero-image" src="'+esc(state.settings.cover)+'" alt="La nostra foto">':'<div class="hero-orbit"></div><div class="hero-orbit second"></div><div class="hero-heart">'+icon('heart')+'</div>')+'<div class="hero-content"><div><span class="hero-kicker">LA NOSTRA STORIA</span><h1>Tu, io<br><em>Per sempre <span class="forever-symbol" aria-label="infinito">∞</span></em></h1></div><div class="together"><div class="together-title">Insieme da</div><div class="counter" aria-label="Tempo trascorso insieme"><div><strong id="days">—</strong><span>giorni</span></div><div><strong id="hours">—</strong><span>ore</span></div><div><strong id="minutes">—</strong><span>minuti</span></div><div><strong id="seconds">—</strong><span>secondi</span></div></div><p class="together-since">'+(date?'Dal '+esc(formatDate(date))+(state.settings.anniversaryStart?' · ore '+esc(state.settings.anniversaryStart.time):''):'Scegli la vostra data nel profilo')+'</p></div></div></section><div class="stat-strip"><div><strong>'+state.memories.length+'</strong><span>Ricordi</span></div><div><strong>'+state.countries.length+'</strong><span>Paesi visitati</span></div><div><strong>'+upcomingCount+'</strong><span>Countdown</span></div><div><strong>'+state.goals.filter(g=>g.group==='dreams'&&!g.completed).length+'</strong><span>Sogni</span></div></div></div><div class="home-side"><button class="goals-entry" data-view="obiettivi"><span class="tile-icon">'+icon('sparkle')+'</span><span><strong>I nostri obiettivi</strong><small>Film, videogiochi e sogni</small></span>'+icon('right','chevron')+'</button><div class="section-heading"><h2>I nostri traguardi</h2><button class="text-button" data-view="ricordi">Esplora '+icon('right')+'</button></div><div class="collection-grid">'+Object.keys(sectionInfo).map(key=>collectionTile(key)).join('')+'<button class="collection-card tone-letters" data-view="lettere"><span class="tile-icon">'+icon('letter')+'</span><strong>Pensiero</strong><small>'+state.letters.length+' '+(state.letters.length===1?'ricordo':'ricordi')+'</small>'+icon('right','chevron')+'</button></div></div></div>';
+ return '<div class="home-topline"><span>'+esc(capitalize(new Date().toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long'})))+'</span><span>'+icon('lock')+'Il nostro spazio</span></div><div class="home-layout"><div><section class="hero">'+(state.settings.cover?'<img class="hero-image" src="'+esc(state.settings.cover)+'" alt="La nostra foto">':'<div class="hero-orbit"></div><div class="hero-orbit second"></div><div class="hero-heart">'+icon('heart')+'</div>')+'<div class="hero-content"><div><span class="hero-kicker">LA NOSTRA STORIA</span><h1>Tu, io<br><em>Per sempre <span class="forever-symbol" aria-label="infinito">∞</span></em></h1></div><div class="together"><div class="together-title">Insieme da</div><div class="counter" aria-label="Tempo trascorso insieme"><div><strong id="days">—</strong><span>giorni</span></div><div><strong id="hours">—</strong><span>ore</span></div><div><strong id="minutes">—</strong><span>minuti</span></div><div><strong id="seconds">—</strong><span>secondi</span></div></div><p class="together-since">'+(date?'Dal '+esc(formatDate(date))+(state.settings.anniversaryStart?' · ore '+esc(state.settings.anniversaryStart.time):''):'Scegli la vostra data nel profilo')+'</p></div></div></section><div class="stat-strip"><div><strong>'+state.memories.length+'</strong><span>Ricordi</span></div><div><strong>'+state.countries.length+'</strong><span>Paesi visitati</span></div><div><strong>'+upcomingCount+'</strong><span>Countdown</span></div><div><strong>'+state.goals.filter(g=>g.group==='dreams'&&!g.completed).length+'</strong><span>Sogni</span></div></div></div><div class="home-side"><button class="goals-entry" data-view="obiettivi"><span class="tile-icon">'+icon('sparkle')+'</span><span><strong>I nostri obiettivi</strong><small>Film, videogiochi e sogni</small></span>'+icon('right','chevron')+'</button><button class="goals-entry places-entry" data-view="posti"><span class="tile-icon">'+icon('pin')+'</span><span><strong>Dove andiamo?</strong><small>Le nostre prossime idee</small></span>'+icon('right','chevron')+'</button><div class="section-heading"><h2>I nostri traguardi</h2><button class="text-button" data-view="ricordi">Esplora '+icon('right')+'</button></div><div class="collection-grid">'+Object.keys(sectionInfo).map(key=>collectionTile(key)).join('')+'<button class="collection-card tone-letters" data-view="lettere"><span class="tile-icon">'+icon('letter')+'</span><strong>Pensiero</strong><small>'+state.letters.length+' '+(state.letters.length===1?'ricordo':'ricordi')+'</small>'+icon('right','chevron')+'</button></div></div></div>';
 }
 function tickCounter(){
  tickCountdowns();
@@ -328,7 +331,7 @@ function renderGames(){
  return '<div class="page-heading"><p class="eyebrow">ANCORA QUALCOSA DA SCOPRIRE</p><h1>Un po’ di noi<br><em>Per gioco</em></h1><p class="games-intro">Create giochi e sfidatevi, ognuno con i propri risultati</p></div><div class="game-types">'+Object.entries(gameTypes).filter(([key])=>key!=='truefalse').map(([key,g])=>'<button class="game-type" data-game-type="'+key+'">'+icon(g.icon)+'<strong>'+g.title+'</strong><small>'+g.subtitle+'</small></button>').join('')+'</div><div class="section-heading"><h2>Creati da noi</h2><p>'+state.games.length+' '+(state.games.length===1?'gioco':'giochi')+'</p></div><div class="game-list">'+(state.games.length?state.games.map(savedGame).join(''):empty('Le regole le inventiamo noi','Scegli un tipo di gioco qui sopra e prepara le tue domande. I contenuti li decideremo insieme.','','','games'))+'</div>';
 }
 let pageAnimations=[],pageGhost=null,motionToken=0;
-const pageRenderers={home:renderHome,ricordi:renderMemories,calendario:renderCalendar,lettere:renderLetters,countdown:renderCountdowns,giochi:renderGames,obiettivi:renderGoals};
+const pageRenderers={home:renderHome,ricordi:renderMemories,calendario:renderCalendar,lettere:renderLetters,countdown:renderCountdowns,giochi:renderGames,obiettivi:renderGoals,posti:renderPlaces};
 let pageDragFrame=null;
 function reducedMotion(){return matchMedia('(prefers-reduced-motion: reduce)').matches;}
 function clearPageMotion(){
@@ -343,10 +346,10 @@ function pageSnapshot(next=null){
  $('pageStage').append(node);node.scrollTop=next===null?$('view').scrollTop:0;return node;
 }
 function navigate(next,{fromHash=false,dragOffset=0}={}){
- if(!DiaryInteraction.pages.includes(next)&&!['lettere','obiettivi'].includes(next))return;
+ if(!DiaryInteraction.pages.includes(next)&&!['lettere','obiettivi','posti'].includes(next))return;
  if(next==='lettere')collection=null;
  if(next===view){clearPageMotion();positionNavigationBubble();return;}
- const previous=view,direction=DiaryInteraction.pages.indexOf(next)>DiaryInteraction.pages.indexOf(previous==='lettere'?'ricordi':previous==='obiettivi'?'home':previous)?1:-1;
+ const previous=view,direction=DiaryInteraction.pages.indexOf(next)>DiaryInteraction.pages.indexOf(previous==='lettere'?'ricordi':['obiettivi','posti'].includes(previous)?'home':previous)?1:-1;
  clearPageMotion();const token=motionToken,width=$('pageStage').clientWidth;
  const sameCollection=['ricordi','lettere'].includes(previous)&&['ricordi','lettere'].includes(next);
  const snapshot=reducedMotion()||sameCollection||!dragOffset?null:pageSnapshot();pageGhost=snapshot;
@@ -362,18 +365,18 @@ function navigate(next,{fromHash=false,dragOffset=0}={}){
  pageAnimations=[snapshot.animate([{transform:'translate3d('+dragOffset+'px,0,0)'},{transform:'translate3d('+(-direction*width)+'px,0,0)'}],timing),$('view').animate([{transform:'translate3d('+(direction*width+dragOffset)+'px,0,0)'},{transform:'translate3d(0,0,0)'}],timing)];
  Promise.all(pageAnimations.map(a=>a.finished)).then(()=>{if(token===motionToken)clearPageMotion();}).catch(()=>{});
 }
-window.addEventListener('hashchange',()=>{const next=location.hash.slice(1);if((DiaryInteraction.pages.includes(next)||['lettere','obiettivi'].includes(next))&&next!==view)navigate(next,{fromHash:true});});
+window.addEventListener('hashchange',()=>{const next=location.hash.slice(1);if((DiaryInteraction.pages.includes(next)||['lettere','obiettivi','posti'].includes(next))&&next!==view)navigate(next,{fromHash:true});});
 let navPointer=null,blockNavClickUntil=0;
 function renderNavigation(){
  const nav=$('bottomNav');
  if(!nav.querySelector('.nav-bubble'))nav.innerHTML='<span class="nav-bubble" aria-hidden="true"></span>'+[['home','home','Home'],['ricordi','album','Ricordi'],['calendario','calendar','Calendario'],['countdown','clock','Countdown'],['giochi','games','Giochi']].map(([id,ic,label])=>'<button type="button" data-page="'+id+'">'+icon(ic)+'<span>'+label+'</span></button>').join('');
- for(const link of nav.querySelectorAll('button[data-page]')){const selected=link.dataset.page===(view==='lettere'?'ricordi':view==='obiettivi'?'home':view);link.classList.toggle('active',selected);if(selected)link.setAttribute('aria-current','page');else link.removeAttribute('aria-current');}
+ for(const link of nav.querySelectorAll('button[data-page]')){const selected=link.dataset.page===(view==='lettere'?'ricordi':['obiettivi','posti'].includes(view)?'home':view);link.classList.toggle('active',selected);if(selected)link.setAttribute('aria-current','page');else link.removeAttribute('aria-current');}
  if(!navPointer)positionNavigationBubble();
 }
 function positionNavigationBubble(clientX=null){
  const nav=$('bottomNav'),links=[...nav.querySelectorAll('button[data-page]')];if(!links.length)return;
  const box=nav.getBoundingClientRect(),first=links[0].getBoundingClientRect(),last=links.at(-1).getBoundingClientRect();
- const index=clientX===null?Math.max(0,DiaryInteraction.pages.indexOf(view==='lettere'?'ricordi':view==='obiettivi'?'home':view)):DiaryInteraction.navIndex(clientX,first.left,last.right,links.length),target=links[index].getBoundingClientRect();
+ const index=clientX===null?Math.max(0,DiaryInteraction.pages.indexOf(view==='lettere'?'ricordi':['obiettivi','posti'].includes(view)?'home':view)):DiaryInteraction.navIndex(clientX,first.left,last.right,links.length),target=links[index].getBoundingClientRect();
  const left=clientX===null?target.left:Math.max(first.left,Math.min(last.left,clientX-first.width/2));
  nav.style.setProperty('--bubble-x',(left-box.left-nav.clientLeft)+'px');nav.style.setProperty('--bubble-width',target.width+'px');
  for(let i=0;i<links.length;i++)links[i].classList.toggle('nav-preview',clientX!==null&&i===index);
@@ -578,7 +581,7 @@ function verifySync(c){
 async function syncSnapshot(){
  if(syncStarted||!peerPerson)return;syncStarted=true;updatePartnerStatus();
  connection('Scambio dei contenuti mancanti in corso…',true);
- const current=channel,snapshot=[...ops].filter(o=>!current.peerIds.has(o.id)).sort((a,b)=>Number(a.kind==='media')-Number(b.kind==='media'));
+ const current=channel,snapshot=[...ops].filter(o=>!current.peerIds.has(o.id)).sort((a,b)=>Number(['media','place-photo'].includes(a.kind))-Number(['media','place-photo'].includes(b.kind)));
  for(const op of snapshot){if(current!==channel)throw Error('Collegamento sostituito');await sendOperation(op,current);}
  if(current!==channel)throw Error('Collegamento sostituito');
  current.sentSnapshot=true;
@@ -918,7 +921,10 @@ $('confirmDeleteMemory').onclick=async e=>withSave(e.currentTarget,async()=>{
 $('deleteMemoryDialog').addEventListener('close',()=>{deleteMemoryId=null;});
 let photoViewerItems=[],photoViewerIndex=0;
 function openPhotoViewer(id){
- const memory=state.memories.find(m=>m.id===active);photoViewerItems=(memory?.media||[]);
+ const memory=state.memories.find(m=>m.id===active);openMediaViewer(memory?.media||[],id);
+}
+function openMediaViewer(items,id){
+ photoViewerItems=items;
  photoViewerIndex=photoViewerItems.findIndex(m=>m.id===id);if(photoViewerIndex<0)return;
  $('photoStrip').innerHTML=photoViewerItems.map(m=>'<figure class="photo-slide">'+(m.type.startsWith('image/')?'<img src="'+esc(m.url)+'" alt="'+esc(m.name)+'" draggable="false">':'<video controls playsinline preload="metadata" src="'+esc(m.url)+'" aria-label="'+esc(m.name)+'"></video>')+'</figure>').join('');
  $('photoViewer').showModal();$('photoStrip').scrollTo({left:photoViewerIndex*$('photoStrip').clientWidth,behavior:'instant'});updatePhotoPosition();
@@ -939,7 +945,7 @@ $('photoViewer').addEventListener('close',()=>{for(const v of $('photoStrip').qu
 let pageTouch=null;
 $('view').addEventListener('touchstart',e=>{
  pageTouch=null;
- if(e.touches.length!==1||document.querySelector('dialog[open]')||e.target.closest('input,textarea,select,a,[contenteditable],.chips,.collection-tabs,.calendar,.gallery,.answer-options'))return;
+ if(e.touches.length!==1||document.querySelector('dialog[open]')||e.target.closest('input,textarea,select,a,[contenteditable],.chips,.collection-tabs,.calendar,.gallery,.answer-options,.places-page'))return;
  const touch=e.touches[0];if(touch.clientX<24||touch.clientX>innerWidth-24)return;
  clearPageMotion();pageTouch={x:touch.clientX,y:touch.clientY,time:performance.now(),view,top:$('view').scrollTop,width:$('pageStage').clientWidth,dx:0,next:null};
 },{passive:true});
@@ -949,7 +955,7 @@ $('view').addEventListener('touchmove',e=>{
  const touch=e.touches[0],dx=touch.clientX-start.x,dy=touch.clientY-start.y;
  if(Math.abs(dy)>Math.abs(dx)&&!start.next){pageTouch=null;return;}
  if(Math.abs(dx)<12||Math.abs(dx)<Math.abs(dy)*1.3||Math.abs($('view').scrollTop-start.top)>12)return;
- const index=DiaryInteraction.pages.indexOf(view==='lettere'?'ricordi':view==='obiettivi'?'home':view),next=DiaryInteraction.pages[index+(dx<0?1:-1)];
+ const index=DiaryInteraction.pages.indexOf(view==='lettere'?'ricordi':['obiettivi','posti'].includes(view)?'home':view),next=DiaryInteraction.pages[index+(dx<0?1:-1)];
  if(!next)return;
  if(start.next!==next){pageGhost?.remove();pageGhost=reducedMotion()?null:pageSnapshot(next);start.next=next;}
  start.dx=Math.max(-start.width,Math.min(start.width,dx));
@@ -982,6 +988,7 @@ $('view').addEventListener('touchend',e=>{
 },{passive:false});
 for(const event of ['gesturestart','gesturechange'])document.addEventListener(event,e=>e.preventDefault(),{passive:false});
 document.addEventListener('touchmove',e=>{if(e.touches.length>1&&e.cancelable)e.preventDefault();},{passive:false});
+initPlaces();
 init().catch(e=>{const node=$('bootStatus');node.hidden=false;node.textContent='Archivio non disponibile: '+e.message;toast('Archivio non disponibile: '+e.message);});
 
 function updateCoverSettings(){

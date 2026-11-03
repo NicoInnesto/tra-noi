@@ -28,7 +28,12 @@ function compactOps(ops){
  const deletedGameIds=new Set(ops.filter(o=>o.kind==='game'&&games.has(key(o))).map(o=>o.activity));
  // The owner's tombstone remains after the original game is compacted away.
  for(const o of ops)if(o.kind==='delete-game'&&!ops.some(g=>g.kind==='game'&&g.activity===o.activity))deletedGameIds.add(o.activity);
+ const removedPhotos=new Set(ops.filter(o=>o.kind==='place-delete-photo').map(o=>JSON.stringify([o.activity,o.author,o.data.mediaId])));
+ const removedPosts=new Set(ops.filter(o=>o.kind==='place-delete-post').map(o=>JSON.stringify([o.activity,o.author])));
+ const removedFolders=new Set(ops.filter(o=>o.kind==='place-delete-folder').map(o=>o.activity));
+ const hiddenPostIds=new Set(ops.filter(o=>o.kind==='place-post'&&(removedPosts.has(JSON.stringify([o.activity,o.author]))||removedFolders.has(o.data.folder))).map(o=>o.activity));
  return ops.filter(o=>{
+  if(o.kind==='place-photo'&&(hiddenPostIds.has(o.activity)||removedPhotos.has(JSON.stringify([o.activity,o.author,o.id]))))return false;
   if(deletedGoals.has(o.activity)&&['goal','goal-state'].includes(o.kind))return false;
   if(seen.has(o.id))return false;seen.add(o.id);
   if(deleted.has(o.activity)&&content.has(o.kind)||deletedEvents.has(o.activity)&&o.kind==='countdown')return false;
@@ -72,7 +77,7 @@ function project(ops){
  }
  for(const name of hiddenCategories){categories.delete(name);customCategories.delete(name);}
  for(const a of memories.values()){if(a.section==='experiences'&&hiddenCategories.has(a.category)){a.category='Altro';categories.add('Altro');}a.removedMedia=a.media.filter(m=>mediaStates.get(JSON.stringify([a.id,m.id]))===true);a.media=a.media.filter(m=>mediaStates.get(JSON.stringify([a.id,m.id]))!==true);}
- return {goals:[...goals.values()].map(g=>({...g,completed:goalStates.get(g.id)||false})),countries:[...countryStates].filter(([,visited])=>visited).map(([code])=>code).sort(),customCategories:[...customCategories.values()],countdowns:[...countdowns.values()].sort((a,b)=>a.date.localeCompare(b.date)||a.title.localeCompare(b.title)),memories:[...memories.values()].sort((a,b)=>(b.date||'').localeCompare(a.date||'')||a.title.localeCompare(b.title)),categories:[...categories],profiles,settings,identities,letters:[...letters.values()].sort((a,b)=>b.time-a.time),games:[...games.values()].sort((a,b)=>b.time-a.time),results};
+ return {places:projectPlaces(ops),goals:[...goals.values()].map(g=>({...g,completed:goalStates.get(g.id)||false})),countries:[...countryStates].filter(([,visited])=>visited).map(([code])=>code).sort(),customCategories:[...customCategories.values()],countdowns:[...countdowns.values()].sort((a,b)=>a.date.localeCompare(b.date)||a.title.localeCompare(b.title)),memories:[...memories.values()].sort((a,b)=>(b.date||'').localeCompare(a.date||'')||a.title.localeCompare(b.title)),categories:[...categories],profiles,settings,identities,letters:[...letters.values()].sort((a,b)=>b.time-a.time),games:[...games.values()].sort((a,b)=>b.time-a.time),results};
 }
 function validDate(v){if(v==='')return true;if(typeof v!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(v))return false;const d=new Date(v+'T12:00:00Z');return !Number.isNaN(d.valueOf())&&d.toISOString().slice(0,10)===v;}
 function text(v,max){return typeof v==='string'&&v.length<=max;}
@@ -105,7 +110,35 @@ function validateOp(o){
  if(o.kind==='game')ok=text(d.title,120)&&!!d.title.trim()&&['quiz','conversation','truefalse','truthdare','wouldrather'].includes(d.type)&&Array.isArray(d.questions)&&d.questions.length>=1&&d.questions.length<=10&&d.questions.every(q=>text(q.text,500)&&!!q.text.trim()&&(d.type!=='quiz'||Array.isArray(q.options)&&q.options.length===4&&q.options.every(x=>text(x,200)&&!!x.trim())&&Number.isInteger(q.correct)&&q.correct>=0&&q.correct<4)&&(d.type!=='wouldrather'||Array.isArray(q.options)&&q.options.length===2&&q.options.every(x=>text(x,200)&&!!x.trim())&&!Object.hasOwn(q,'correct')));
  if(o.kind==='game-result')ok=Number.isInteger(d.total)&&d.total>=1&&d.total<=10&&Number.isInteger(d.score)&&d.score>=0&&d.score<=d.total;
  if(o.kind==='game-played')ok=Number.isInteger(d.total)&&d.total>=1&&d.total<=10&&Object.keys(d).length===1;
+ const shortId=v=>text(v,120)&&!!v;
+ const cost=v=>v===null||Number.isSafeInteger(v)&&v>=0&&v<=1000000000;
+ if(o.kind==='place-folder')ok=shortId(o.activity)&&text(d.title,120)&&!!d.title.trim()&&Object.keys(d).length===1;
+ if(o.kind==='place-post')ok=shortId(o.activity)&&shortId(d.folder)&&text(d.title,120)&&!!d.title.trim()&&text(d.description,3000)&&['restaurant','trip','other'].includes(d.kind)&&d.budget&&['expected','travel','stay','extra'].every(k=>cost(d.budget[k]))&&Object.keys(d.budget).length===4&&Object.keys(d).length===5;
+ if(o.kind==='place-photo')ok=shortId(o.activity)&&image(d.url)&&!!d.url&&text(d.name,300)&&Object.keys(d).length===2;
+ if(o.kind==='place-like')ok=shortId(o.activity)&&typeof d.liked==='boolean'&&Object.keys(d).length===1;
+ if(o.kind==='place-comment')ok=shortId(o.activity)&&shortId(d.post)&&text(d.body,2000)&&!!d.body.trim()&&Object.keys(d).length===2;
+ if(o.kind==='place-delete-photo')ok=shortId(o.activity)&&shortId(d.mediaId)&&Object.keys(d).length===1;
+ if(['place-delete-folder','place-delete-post','place-delete-comment'].includes(o.kind))ok=shortId(o.activity)&&Object.keys(d).length===0;
+ if(o.kind.startsWith('place-'))ok=ok&&Object.hasOwn(people,o.author);
  if(!ok)throw Error('Contenuto del diario non valido: '+o.kind);
+}
+function projectPlaces(ops){
+ const folders=new Map(),posts=new Map(),photos=new Map(),likes=new Map(),comments=new Map(),deletedFolders=new Set(),deletedPosts=new Set(),deletedPhotos=new Set(),deletedComments=new Set();
+ for(const o of ordered(ops)){
+  const d=o.data,key=JSON.stringify([o.activity,o.author]);
+  if(o.kind==='place-folder'){const old=folders.get(o.activity);folders.set(o.activity,{id:o.activity,author:old?.author||o.author,...d});}
+  if(o.kind==='place-delete-folder')deletedFolders.add(o.activity);
+  if(o.kind==='place-post'){const old=posts.get(o.activity);if(!old||old.author===o.author)posts.set(o.activity,{id:o.activity,author:o.author,time:old?.time||o.time,...d});}
+  if(o.kind==='place-delete-post')deletedPosts.add(o.activity);
+  if(o.kind==='place-photo')photos.set(o.id,{id:o.id,post:o.activity,author:o.author,...d});
+  if(o.kind==='place-delete-photo')deletedPhotos.add(d.mediaId);
+  if(o.kind==='place-like')likes.set(key,{post:o.activity,author:o.author,liked:d.liked});
+  if(o.kind==='place-comment'){const old=comments.get(o.activity);if(!old||old.author===o.author)comments.set(o.activity,{id:o.activity,author:o.author,time:old?.time||o.time,...d});}
+  if(o.kind==='place-delete-comment')deletedComments.add(JSON.stringify([o.activity,o.author]));
+ }
+ const visibleFolders=[...folders.values()].filter(f=>!deletedFolders.has(f.id));
+ const ids=new Set(visibleFolders.map(f=>f.id));
+ return {folders:visibleFolders,posts:[...posts.values()].filter(p=>ids.has(p.folder)&&!deletedPosts.has(p.id)).map(p=>({...p,photos:[...photos.values()].filter(m=>m.post===p.id&&m.author===p.author&&!deletedPhotos.has(m.id)),likes:[...likes.values()].filter(l=>l.post===p.id&&l.liked).map(l=>l.author),comments:[...comments.values()].filter(c=>c.post===p.id&&!deletedComments.has(JSON.stringify([c.id,c.author]))).sort((a,b)=>a.time-b.time||a.id.localeCompare(b.id))})).sort((a,b)=>b.time-a.time||a.id.localeCompare(b.id))};
 }
 function activities(ops){return project(ops).memories;}
 function profileChanges(profiles,owner,baseline,draft,allowPartnerPhoto=false){
