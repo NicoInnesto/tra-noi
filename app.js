@@ -1,8 +1,8 @@
 'use strict';
 window.diaryBoot=window.diaryBoot||{phase:'Caricamento del diario',ready:false};
-const VERSION=51;
-const RELEASE='1.7';
-const WIRE_VERSION=41;
+const VERSION=52;
+const RELEASE='1.8';
+const WIRE_VERSION=42;
 const uuid=()=>crypto.randomUUID?crypto.randomUUID():([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g,c=>(c^crypto.getRandomValues(new Uint8Array(1))[0]&15>>c/4).toString(16));
 const $=id=>document.getElementById(id);
 const storagePrefix='tra-noi:'+new URL('./',location.href).pathname+':';
@@ -10,6 +10,7 @@ const settingsStorage={getItem:key=>localStorage.getItem(storagePrefix+key),setI
 const capitalize=s=>s?s[0].toLocaleUpperCase('it-IT')+s.slice(1):s;
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const paths={
+ compass:'M22 12a10 10 0 1 0 0 .1ZM16 8l-2.5 5.5L8 16l2.5-5.5Z',
  pin:'M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 1 1 16 0ZM15 10a3 3 0 1 0-6 0 3 3 0 0 0 6 0Z',
  celebration:'M4 12h16v9H4Zm-1 4h18M7 8v4m5-4v4m5-4v4M7 4v1m5-2v2m5-1v1',
  pencil:'m15 4 5 5M4 15 15 4a2 2 0 0 1 5 5L9 20l-6 1Z',
@@ -152,6 +153,7 @@ function collectionTabs(current){
 let memoryPageFrame=null,renderedDetailKey='';
 function updateView(markup){
  const root=$('view');
+ if(view==='posti'){memoryPageFrame=null;updatePlacesView(markup);return;}
  if(view==='ricordi'&&collection){
   const template=document.createElement('template');template.innerHTML=markup;
   const nextGrid=template.content.querySelector('.memory-grid'),grid=root.querySelector('.memory-grid');
@@ -213,7 +215,8 @@ function updateStorageUsage(){
 }
 function render(){
  for(const panel of $('view').querySelectorAll('[data-goal-group]')){if(panel.open)goalPanelsOpen.add(panel.dataset.goalGroup);else goalPanelsOpen.delete(panel.dataset.goalGroup);}
- const placesScroll=$('view').querySelector('[data-places-feed]')?.scrollTop||0;
+ const oldFeed=$('view').querySelector('[data-places-feed]'),placesScroll=oldFeed?.scrollTop||0;
+ const feedAnchor=oldFeed?.children[Math.round(placesScroll/Math.max(1,oldFeed.clientHeight))]?.dataset.feedPost,feedKey=oldFeed?.dataset.feedKey;
  const oldTabs=$('view').querySelector('.collection-tabs'),oldChips=$('view').querySelector('.chips');
  if(oldTabs)collectionScroll.tabs=oldTabs.scrollLeft;
  if(oldChips)collectionScroll.chips=oldChips.scrollLeft;
@@ -221,8 +224,12 @@ function render(){
  const avatarMarkup=avatar(state.profiles[author]);if(avatarMarkup!==headerAvatarMarkup){$('profileButton').innerHTML=avatarMarkup;headerAvatarMarkup=avatarMarkup;}updatePartnerStatus();if($('profileDialog').open||!$('profileMenu').children.length)updateProfileMenu();
  renderNavigation();
  updateView(({home:renderHome,ricordi:renderMemories,calendario:renderCalendar,lettere:renderLetters,countdown:renderCountdowns,giochi:renderGames,obiettivi:renderGoals,posti:renderPlaces}[view])());
- const placesFeed=$('view').querySelector('[data-places-feed]');if(placesFeed)placesFeed.scrollTop=placesScroll;
+ $('view').classList.toggle('places-screen',view==='posti'&&placesMode==='explore');
+ const placesFeed=$('view').querySelector('[data-places-feed]');
+ if(placesFeed&&placesFeed.dataset.feedKey===feedKey){const index=[...placesFeed.children].findIndex(n=>n.dataset.feedPost===feedAnchor);placesFeed.scrollTop=index>=0?index*placesFeed.clientHeight:placesScroll;}
  if($('placeDetailDialog').open)refreshPlacesDetail();
+ if($('placeCommentsDialog').open)refreshPlaceComments();
+ observePlaceMatches();
  const newTabs=$('view').querySelector('.collection-tabs'),newChips=$('view').querySelector('.chips');
  if(newTabs)newTabs.scrollLeft=collectionScroll.tabs;
  if(newChips)newChips.scrollLeft=collectionScroll.chips;
@@ -238,7 +245,7 @@ function render(){
 }
 function renderHome(){
  const date=state.settings.anniversaryStart?.date||state.settings.anniversary||'',upcomingCount=state.countdowns.filter(c=>DiaryInteraction.countdownDays(c.date)>=0).length;
- return '<div class="home-topline"><span>'+esc(capitalize(new Date().toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long'})))+'</span><span>'+icon('lock')+'Il nostro spazio</span></div><div class="home-layout"><div><section class="hero">'+(state.settings.cover?'<img class="hero-image" src="'+esc(state.settings.cover)+'" alt="La nostra foto">':'<div class="hero-orbit"></div><div class="hero-orbit second"></div><div class="hero-heart">'+icon('heart')+'</div>')+'<div class="hero-content"><div><span class="hero-kicker">LA NOSTRA STORIA</span><h1>Tu, io<br><em>Per sempre <span class="forever-symbol" aria-label="infinito">∞</span></em></h1></div><div class="together"><div class="together-title">Insieme da</div><div class="counter" aria-label="Tempo trascorso insieme"><div><strong id="days">—</strong><span>giorni</span></div><div><strong id="hours">—</strong><span>ore</span></div><div><strong id="minutes">—</strong><span>minuti</span></div><div><strong id="seconds">—</strong><span>secondi</span></div></div><p class="together-since">'+(date?'Dal '+esc(formatDate(date))+(state.settings.anniversaryStart?' · ore '+esc(state.settings.anniversaryStart.time):''):'Scegli la vostra data nel profilo')+'</p></div></div></section><div class="stat-strip"><div><strong>'+state.memories.length+'</strong><span>Ricordi</span></div><div><strong>'+state.countries.length+'</strong><span>Paesi visitati</span></div><div><strong>'+upcomingCount+'</strong><span>Countdown</span></div><div><strong>'+state.goals.filter(g=>g.group==='dreams'&&!g.completed).length+'</strong><span>Sogni</span></div></div></div><div class="home-side"><button class="goals-entry" data-view="obiettivi"><span class="tile-icon">'+icon('sparkle')+'</span><span><strong>I nostri obiettivi</strong><small>Film, videogiochi e sogni</small></span>'+icon('right','chevron')+'</button><button class="goals-entry places-entry" data-view="posti"><span class="tile-icon">'+icon('pin')+'</span><span><strong>Dove andiamo?</strong><small>Le nostre prossime idee</small></span>'+icon('right','chevron')+'</button><div class="section-heading"><h2>I nostri traguardi</h2><button class="text-button" data-view="ricordi">Esplora '+icon('right')+'</button></div><div class="collection-grid">'+Object.keys(sectionInfo).map(key=>collectionTile(key)).join('')+'<button class="collection-card tone-letters" data-view="lettere"><span class="tile-icon">'+icon('letter')+'</span><strong>Pensiero</strong><small>'+state.letters.length+' '+(state.letters.length===1?'ricordo':'ricordi')+'</small>'+icon('right','chevron')+'</button></div></div></div>';
+ return '<div class="home-topline"><span>'+esc(capitalize(new Date().toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long'})))+'</span><span>'+icon('lock')+'Il nostro spazio</span></div><div class="home-layout"><div><section class="hero">'+(state.settings.cover?'<img class="hero-image" src="'+esc(state.settings.cover)+'" alt="La nostra foto">':'<div class="hero-orbit"></div><div class="hero-orbit second"></div><div class="hero-heart">'+icon('heart')+'</div>')+'<div class="hero-content"><div><span class="hero-kicker">LA NOSTRA STORIA</span><h1>Tu, io<br><em>Per sempre <span class="forever-symbol" aria-label="infinito">∞</span></em></h1></div><div class="together"><div class="together-title">Insieme da</div><div class="counter" aria-label="Tempo trascorso insieme"><div><strong id="days">—</strong><span>giorni</span></div><div><strong id="hours">—</strong><span>ore</span></div><div><strong id="minutes">—</strong><span>minuti</span></div><div><strong id="seconds">—</strong><span>secondi</span></div></div><p class="together-since">'+(date?'Dal '+esc(formatDate(date))+(state.settings.anniversaryStart?' · ore '+esc(state.settings.anniversaryStart.time):''):'Scegli la vostra data nel profilo')+'</p></div></div></section><div class="stat-strip"><div><strong>'+state.memories.length+'</strong><span>Ricordi</span></div><div><strong>'+state.countries.length+'</strong><span>Paesi visitati</span></div><div><strong>'+upcomingCount+'</strong><span>Countdown</span></div><div><strong>'+state.goals.filter(g=>g.group==='dreams'&&!g.completed).length+'</strong><span>Sogni</span></div></div></div><div class="home-side"><button class="goals-entry" data-view="obiettivi"><span class="tile-icon">'+icon('sparkle')+'</span><span><strong>I nostri obiettivi</strong><small>Film, videogiochi e sogni</small></span>'+icon('right','chevron')+'</button><button class="goals-entry countdown-entry" data-view="countdown"><span class="tile-icon">'+icon('clock')+'</span><span><strong>I nostri countdown</strong><small>'+upcomingCount+' '+(upcomingCount===1?'evento da aspettare':'eventi da aspettare')+'</small></span>'+icon('right','chevron')+'</button><div class="section-heading"><h2>I nostri traguardi</h2><button class="text-button" data-view="ricordi">Esplora '+icon('right')+'</button></div><div class="collection-grid">'+Object.keys(sectionInfo).map(key=>collectionTile(key)).join('')+'<button class="collection-card tone-letters" data-view="lettere"><span class="tile-icon">'+icon('letter')+'</span><strong>Pensiero</strong><small>'+state.letters.length+' '+(state.letters.length===1?'ricordo':'ricordi')+'</small>'+icon('right','chevron')+'</button></div></div></div>';
 }
 function tickCounter(){
  tickCountdowns();
@@ -265,7 +272,7 @@ function countdownCard(event){
 }
 function renderCountdowns(){
  const upcoming=state.countdowns.filter(c=>DiaryInteraction.countdownDays(c.date)>=0),past=state.countdowns.filter(c=>DiaryInteraction.countdownDays(c.date)<0).toReversed();
- return '<div class="heading-row"><div class="page-heading"><p class="eyebrow">NON VEDIAMO L’ORA</p><h1>Ci aspetta <em>qualcosa</em></h1><p>Le cose belle iniziano anche nell’attesa.</p></div><button class="primary" data-action="new-countdown">'+icon('plus')+'Evento</button></div><div class="countdown-grid">'+(upcoming.length?upcoming.map(countdownCard).join(''):empty('Il prossimo sogno, insieme','Un viaggio, una serata speciale o un giorno che aspettate.','Crea un countdown','new-countdown','clock'))+'</div><details id="countdownArchive" class="countdown-archive" '+(countdownArchiveOpen?'open':'')+'><summary>'+icon('clock')+'I countdown passati <span>'+past.length+'</span></summary><p class="field-help">Le attese concluse restano qui e nel calendario.</p><div class="countdown-grid">'+(past.length?past.map(countdownCard).join(''):'<p class="muted">Le vostre prossime attese diventeranno ricordi qui.</p>')+'</div></details>';
+ return '<button class="text-button back-link" data-view="home">'+icon('left')+'Home</button><div class="heading-row"><div class="page-heading"><p class="eyebrow">NON VEDIAMO L’ORA</p><h1>Ci aspetta <em>qualcosa</em></h1><p>Le cose belle iniziano anche nell’attesa.</p></div><button class="primary" data-action="new-countdown">'+icon('plus')+'Evento</button></div><div class="countdown-grid">'+(upcoming.length?upcoming.map(countdownCard).join(''):empty('Il prossimo sogno, insieme','Un viaggio, una serata speciale o un giorno che aspettate.','Crea un countdown','new-countdown','clock'))+'</div><details id="countdownArchive" class="countdown-archive" '+(countdownArchiveOpen?'open':'')+'><summary>'+icon('clock')+'I countdown passati <span>'+past.length+'</span></summary><p class="field-help">Le attese concluse restano qui e nel calendario.</p><div class="countdown-grid">'+(past.length?past.map(countdownCard).join(''):'<p class="muted">Le vostre prossime attese diventeranno ricordi qui.</p>')+'</div></details>';
 }
 $('view').addEventListener('toggle',e=>{if(e.target.id==='countdownArchive')countdownArchiveOpen=e.target.open;},true);
 function tickCountdowns(){
@@ -340,16 +347,16 @@ function clearPageMotion(){
  motionToken++;for(const animation of pageAnimations)animation.cancel();pageAnimations=[];pageGhost?.remove();pageGhost=null;$('view').style.transform='';
 }
 function pageSnapshot(next=null){
- const node=$('view').cloneNode(next===null);node.removeAttribute('id');node.removeAttribute('tabindex');node.className='page-snapshot';node.setAttribute('inert','');node.setAttribute('aria-hidden','true');node.style.transform='';
+ const node=$('view').cloneNode(next===null);node.removeAttribute('id');node.removeAttribute('tabindex');node.className='page-snapshot';node.classList.toggle('places-screen',(next===null?view:next)==='posti'&&placesMode==='explore');node.setAttribute('inert','');node.setAttribute('aria-hidden','true');node.style.transform='';
  if(next!==null){node.innerHTML=pageRenderers[next]();if(next==='home'){const parts=DiaryInteraction.counterParts(state.settings);for(const id of ['days','hours','minutes','seconds']){const item=node.querySelector('#'+id);if(item)item.textContent=parts?(id==='days'?parts[id]:String(parts[id]).padStart(2,'0')):'—';}}}
  for(const child of node.querySelectorAll('[id]'))child.removeAttribute('id');
  $('pageStage').append(node);node.scrollTop=next===null?$('view').scrollTop:0;return node;
 }
 function navigate(next,{fromHash=false,dragOffset=0}={}){
- if(!DiaryInteraction.pages.includes(next)&&!['lettere','obiettivi','posti'].includes(next))return;
+ if(!DiaryInteraction.pages.includes(next)&&!['lettere','obiettivi','countdown'].includes(next))return;
  if(next==='lettere')collection=null;
  if(next===view){clearPageMotion();positionNavigationBubble();return;}
- const previous=view,direction=DiaryInteraction.pages.indexOf(next)>DiaryInteraction.pages.indexOf(previous==='lettere'?'ricordi':['obiettivi','posti'].includes(previous)?'home':previous)?1:-1;
+ const previous=view,direction=DiaryInteraction.pages.indexOf(next)>DiaryInteraction.pages.indexOf(previous==='lettere'?'ricordi':['obiettivi','countdown'].includes(previous)?'home':previous)?1:-1;
  clearPageMotion();const token=motionToken,width=$('pageStage').clientWidth;
  const sameCollection=['ricordi','lettere'].includes(previous)&&['ricordi','lettere'].includes(next);
  const snapshot=reducedMotion()||sameCollection||!dragOffset?null:pageSnapshot();pageGhost=snapshot;
@@ -365,18 +372,18 @@ function navigate(next,{fromHash=false,dragOffset=0}={}){
  pageAnimations=[snapshot.animate([{transform:'translate3d('+dragOffset+'px,0,0)'},{transform:'translate3d('+(-direction*width)+'px,0,0)'}],timing),$('view').animate([{transform:'translate3d('+(direction*width+dragOffset)+'px,0,0)'},{transform:'translate3d(0,0,0)'}],timing)];
  Promise.all(pageAnimations.map(a=>a.finished)).then(()=>{if(token===motionToken)clearPageMotion();}).catch(()=>{});
 }
-window.addEventListener('hashchange',()=>{const next=location.hash.slice(1);if((DiaryInteraction.pages.includes(next)||['lettere','obiettivi','posti'].includes(next))&&next!==view)navigate(next,{fromHash:true});});
+window.addEventListener('hashchange',()=>{const next=location.hash.slice(1);if((DiaryInteraction.pages.includes(next)||['lettere','obiettivi','countdown'].includes(next))&&next!==view)navigate(next,{fromHash:true});});
 let navPointer=null,blockNavClickUntil=0;
 function renderNavigation(){
  const nav=$('bottomNav');
- if(!nav.querySelector('.nav-bubble'))nav.innerHTML='<span class="nav-bubble" aria-hidden="true"></span>'+[['home','home','Home'],['ricordi','album','Ricordi'],['calendario','calendar','Calendario'],['countdown','clock','Countdown'],['giochi','games','Giochi']].map(([id,ic,label])=>'<button type="button" data-page="'+id+'">'+icon(ic)+'<span>'+label+'</span></button>').join('');
- for(const link of nav.querySelectorAll('button[data-page]')){const selected=link.dataset.page===(view==='lettere'?'ricordi':['obiettivi','posti'].includes(view)?'home':view);link.classList.toggle('active',selected);if(selected)link.setAttribute('aria-current','page');else link.removeAttribute('aria-current');}
+ if(!nav.querySelector('.nav-bubble'))nav.innerHTML='<span class="nav-bubble" aria-hidden="true"></span>'+[['home','home','Home'],['ricordi','album','Ricordi'],['calendario','calendar','Calendario'],['posti','compass','Esplora'],['giochi','games','Giochi']].map(([id,ic,label])=>'<button type="button" data-page="'+id+'">'+icon(ic)+'<span>'+label+'</span></button>').join('');
+ for(const link of nav.querySelectorAll('button[data-page]')){const selected=link.dataset.page===(view==='lettere'?'ricordi':['obiettivi','countdown'].includes(view)?'home':view);link.classList.toggle('active',selected);if(selected)link.setAttribute('aria-current','page');else link.removeAttribute('aria-current');}
  if(!navPointer)positionNavigationBubble();
 }
 function positionNavigationBubble(clientX=null){
  const nav=$('bottomNav'),links=[...nav.querySelectorAll('button[data-page]')];if(!links.length)return;
  const box=nav.getBoundingClientRect(),first=links[0].getBoundingClientRect(),last=links.at(-1).getBoundingClientRect();
- const index=clientX===null?Math.max(0,DiaryInteraction.pages.indexOf(view==='lettere'?'ricordi':['obiettivi','posti'].includes(view)?'home':view)):DiaryInteraction.navIndex(clientX,first.left,last.right,links.length),target=links[index].getBoundingClientRect();
+ const index=clientX===null?Math.max(0,DiaryInteraction.pages.indexOf(view==='lettere'?'ricordi':['obiettivi','countdown'].includes(view)?'home':view)):DiaryInteraction.navIndex(clientX,first.left,last.right,links.length),target=links[index].getBoundingClientRect();
  const left=clientX===null?target.left:Math.max(first.left,Math.min(last.left,clientX-first.width/2));
  nav.style.setProperty('--bubble-x',(left-box.left-nav.clientLeft)+'px');nav.style.setProperty('--bubble-width',target.width+'px');
  for(let i=0;i<links.length;i++)links[i].classList.toggle('nav-preview',clientX!==null&&i===index);
@@ -955,7 +962,7 @@ $('view').addEventListener('touchmove',e=>{
  const touch=e.touches[0],dx=touch.clientX-start.x,dy=touch.clientY-start.y;
  if(Math.abs(dy)>Math.abs(dx)&&!start.next){pageTouch=null;return;}
  if(Math.abs(dx)<12||Math.abs(dx)<Math.abs(dy)*1.3||Math.abs($('view').scrollTop-start.top)>12)return;
- const index=DiaryInteraction.pages.indexOf(view==='lettere'?'ricordi':['obiettivi','posti'].includes(view)?'home':view),next=DiaryInteraction.pages[index+(dx<0?1:-1)];
+ const index=DiaryInteraction.pages.indexOf(view==='lettere'?'ricordi':['obiettivi','countdown'].includes(view)?'home':view),next=DiaryInteraction.pages[index+(dx<0?1:-1)];
  if(!next)return;
  if(start.next!==next){pageGhost?.remove();pageGhost=reducedMotion()?null:pageSnapshot(next);start.next=next;}
  start.dx=Math.max(-start.width,Math.min(start.width,dx));

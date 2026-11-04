@@ -23,7 +23,7 @@ function device(author,seed,policy,options={}){
   render(){},scheduleSyncRender(){},refreshSyncIndicators(){},toast(message){errors.push(message);}
  };
  vm.createContext(context);
- vm.runInContext("let ops=seed,acks=new Set(),preparedBackup=null,accessPolicy=policy,peerPerson='',syncStarted=false,channel,pollTimer,sendTail=Promise.resolve(),peerName='';const people=DiaryModel.people,sessionTicket='test-shared-ticket',WIRE_VERSION=41,transfers=new Map(),uuid=()=>crypto.randomUUID();",context);
+ vm.runInContext("let ops=seed,acks=new Set(),preparedBackup=null,accessPolicy=policy,peerPerson='',syncStarted=false,channel,pollTimer,sendTail=Promise.resolve(),peerName='';const people=DiaryModel.people,sessionTicket='test-shared-ticket',WIRE_VERSION=42,transfers=new Map(),uuid=()=>crypto.randomUUID();",context);
  vm.runInContext(merge+network,context);
  const channel={readyState:'open',bufferedAmount:0,send(raw){outgoing.push(raw);}};
  context.testChannel=channel;vm.runInContext('bindChannel(testChannel);',context);
@@ -36,7 +36,7 @@ async function waitUntil(test,label,timeout=2500){const start=Date.now();while(!
 (async()=>{
  const common=op('one','create','memory',{section:'experiences',category:'Cinema',title:'Film di prova',date:''});
  const d=device('one',[common],null);d.channel.bufferedAmount=300000;
- d.frame({type:'hello-ok',protocol:41,inventory:[],ticket:'test-shared-ticket',person:'two',name:'Test 2'});
+ d.frame({type:'hello-ok',protocol:42,inventory:[],ticket:'test-shared-ticket',person:'two',name:'Test 2'});
  await pause(20);
  const rating=op('two','rating','memory',{score:9.25,comment:'Voto ricevuto'});
  d.frame({type:'op',op:rating});
@@ -121,6 +121,7 @@ async function waitUntil(test,label,timeout=2500){const start=Date.now();while(!
    own('place-post','post',{folder:person+'-folder',title:'Ristorante',description:'Da provare',kind:'restaurant',budget:{expected:7500,travel:null,stay:null,extra:null}}),
    own('place-photo','post',{url:tiny,name:'copertina.png'}),
    own('place-like','post',{liked:true}),
+   own('place-choice','folder',{post:person+'-post'}),
    own('place-comment','comment',{post:person+'-post',body:'Mi piace questa idea'}),
    own('category','category',{name:'Categoria '+person}),
    own('create','experience',{section:'experiences',category:'Categoria '+person,title:'Esperienza',date:'2026-10-29'}),
@@ -139,7 +140,8 @@ async function waitUntil(test,label,timeout=2500){const start=Date.now();while(!
    ...['trips','holidays','gifts','dance'].map(section=>own('create',section,{section,category:section,title:'Ricordo '+section,date:''}))
   ];
  };
- const allA=[...left.slice(0,2),...extras('one')],allB=[common,...extras('two')];
+ const sharedPlaces=[op('one','place-folder','shared-folder',{title:'Scelta condivisa'}),op('one','place-post','shared-post',{folder:'shared-folder',title:'La stessa idea',description:'',kind:'other',budget:{expected:0,travel:null,stay:null,extra:null}})];
+ const allA=[...left.slice(0,2),...extras('one'),...sharedPlaces,op('one','place-choice','shared-folder',{post:'shared-post'})],allB=[common,...extras('two'),op('two','place-choice','shared-folder',{post:'shared-post'})];
  const h=device('one',allA,created.policy),i=device('two',allB,created.policy);
  h.channel.send=raw=>setTimeout(()=>i.channel.onmessage({data:raw}),0);
  i.channel.send=raw=>setTimeout(()=>h.channel.onmessage({data:raw}),0);
@@ -148,6 +150,8 @@ async function waitUntil(test,label,timeout=2500){const start=Date.now();while(!
  const expected=Access.canonical(Model.project([...allA,...allB]));
  assert.equal(Access.canonical(Model.project([...h.tables.ops.values()])),expected);
  assert.equal(Access.canonical(Model.project([...i.tables.ops.values()])),expected);
+ for(const device of [h,i])assert.deepEqual(Model.project([...device.tables.ops.values()]).places.posts.find(p=>p.id==='shared-post').likes,['one','two']);
+ console.log('PASS: scelte condivise per cartella ricevute e conservate su entrambi i dispositivi');
  console.log('PASS: tutte le raccolte, categorie, commenti, luoghi, pensieri, countdown, obiettivi, giochi, risultati, video e paesi');
  // Concurrent offline edits and deletions converge without resurrecting deleted content.
  const goalBase=op('one','goal','old-goal',{group:'films',title:'Film da eliminare'});
@@ -165,7 +169,7 @@ async function waitUntil(test,label,timeout=2500){const start=Date.now();while(!
  // A failed transaction must never be acknowledged or called a completed sync.
  const refused=op('one','rating','memory',{score:5,comment:'Prova salvataggio'});
  const j=device('two',[common],null,{failId:refused.id});
- j.frame({type:'hello',protocol:41,inventory:[common.id],ticket:'test-shared-ticket',person:'one',name:'Test 1'});
+ j.frame({type:'hello',protocol:42,inventory:[common.id],ticket:'test-shared-ticket',person:'one',name:'Test 1'});
  await pause(10);j.frame({type:'op',op:refused});await pause(30);
  assert(!j.tables.ops.has(refused.id));assert(j.channel.transferFailed);assert(!j.channel.verified);
  assert(!j.outgoing.some(raw=>{try{const value=JSON.parse(JSON.parse(raw).chunk);return value.type==='ack'&&value.id===refused.id;}catch{return false;}}));

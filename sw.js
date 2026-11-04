@@ -1,7 +1,7 @@
 'use strict';
-// Release 1.7 (build 51): add shared proposal folders, budgets, photo feeds, likes and conversations.
-const VERSION=51,BASE=new URL('./',self.location.href),CACHE='tra-noi-pages-'+BASE.pathname+'-v51';
-const relative=['index.html?v=51','style.css?v=51','boot.js?v=51','model.js?v=51','offline.js?v=51','link.js?v=51','interaction.js?v=51','access.js?v=51','preferences.js?v=51','viewport.js?v=51','app.js?v=51','places.js?v=51','backup.js?v=51','manifest.json','manifest-one.json','manifest-two.json','icon.svg?v=51','icon-192.png?v=51','icon-512.png?v=51','apple-touch-icon.png?v=51','vendor/qrcode.js','vendor/jsqr.js','installazione.html','nuova-icona.html','manifest-icon.json'];
+// Release 1.8 (build 52): primary Explore page, exclusive folder choices, shared matches and comment sheets.
+const VERSION=52,BASE=new URL('./',self.location.href),CACHE='tra-noi-pages-'+BASE.pathname+'-v52';
+const relative=['index.html?v=52','style.css?v=52','boot.js?v=52','model.js?v=52','offline.js?v=52','link.js?v=52','interaction.js?v=52','access.js?v=52','preferences.js?v=52','viewport.js?v=52','app.js?v=52','places.js?v=52','backup.js?v=52','manifest.json','manifest-one.json','manifest-two.json','icon.svg?v=52','icon-192.png?v=52','icon-512.png?v=52','apple-touch-icon.png?v=52','vendor/qrcode.js','vendor/jsqr.js','installazione.html','nuova-icona.html','manifest-icon.json'];
 const ASSETS=relative.map(p=>new URL(p,BASE).href),SHELL=ASSETS[0];
 self.addEventListener('install',e=>e.waitUntil((async()=>{const cache=await caches.open(CACHE);await cache.addAll(ASSETS);await self.skipWaiting();})()));
 self.addEventListener('activate',e=>e.waitUntil((async()=>{for(const key of await caches.keys())if(key!==CACHE&&key.startsWith('tra-noi-pages-'+BASE.pathname+'-v'))await caches.delete(key);await self.clients.claim();})()));

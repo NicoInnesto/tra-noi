@@ -1,6 +1,6 @@
 (function(root){
 'use strict';
-const pages=['home','ricordi','calendario','countdown','giochi'];
+const pages=['home','ricordi','calendario','posti','giochi'];
 function countdownDays(date,now=Date.now()){
  const parts=Object.fromEntries(new Intl.DateTimeFormat('en-GB',{timeZone:'Europe/Rome',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date(now)).map(p=>[p.type,p.value]));
  const [y,m,d]=date.split('-').map(Number);

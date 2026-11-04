@@ -116,6 +116,7 @@ function validateOp(o){
  if(o.kind==='place-post')ok=shortId(o.activity)&&shortId(d.folder)&&text(d.title,120)&&!!d.title.trim()&&text(d.description,3000)&&['restaurant','trip','other'].includes(d.kind)&&d.budget&&['expected','travel','stay','extra'].every(k=>cost(d.budget[k]))&&Object.keys(d.budget).length===4&&Object.keys(d).length===5;
  if(o.kind==='place-photo')ok=shortId(o.activity)&&image(d.url)&&!!d.url&&text(d.name,300)&&Object.keys(d).length===2;
  if(o.kind==='place-like')ok=shortId(o.activity)&&typeof d.liked==='boolean'&&Object.keys(d).length===1;
+ if(o.kind==='place-choice')ok=shortId(o.activity)&&(d.post===null||shortId(d.post))&&Object.keys(d).length===1;
  if(o.kind==='place-comment')ok=shortId(o.activity)&&shortId(d.post)&&text(d.body,2000)&&!!d.body.trim()&&Object.keys(d).length===2;
  if(o.kind==='place-delete-photo')ok=shortId(o.activity)&&shortId(d.mediaId)&&Object.keys(d).length===1;
  if(['place-delete-folder','place-delete-post','place-delete-comment'].includes(o.kind))ok=shortId(o.activity)&&Object.keys(d).length===0;
@@ -123,7 +124,7 @@ function validateOp(o){
  if(!ok)throw Error('Contenuto del diario non valido: '+o.kind);
 }
 function projectPlaces(ops){
- const folders=new Map(),posts=new Map(),photos=new Map(),likes=new Map(),comments=new Map(),deletedFolders=new Set(),deletedPosts=new Set(),deletedPhotos=new Set(),deletedComments=new Set();
+ const folders=new Map(),posts=new Map(),photos=new Map(),comments=new Map(),deletedFolders=new Set(),deletedPosts=new Set(),deletedPhotos=new Set(),deletedComments=new Set();
  for(const o of ordered(ops)){
   const d=o.data,key=JSON.stringify([o.activity,o.author]);
   if(o.kind==='place-folder'){const old=folders.get(o.activity);folders.set(o.activity,{id:o.activity,author:old?.author||o.author,...d});}
@@ -132,13 +133,22 @@ function projectPlaces(ops){
   if(o.kind==='place-delete-post')deletedPosts.add(o.activity);
   if(o.kind==='place-photo')photos.set(o.id,{id:o.id,post:o.activity,author:o.author,...d});
   if(o.kind==='place-delete-photo')deletedPhotos.add(d.mediaId);
-  if(o.kind==='place-like')likes.set(key,{post:o.activity,author:o.author,liked:d.liked});
   if(o.kind==='place-comment'){const old=comments.get(o.activity);if(!old||old.author===o.author)comments.set(o.activity,{id:o.activity,author:o.author,time:old?.time||o.time,...d});}
   if(o.kind==='place-delete-comment')deletedComments.add(JSON.stringify([o.activity,o.author]));
  }
  const visibleFolders=[...folders.values()].filter(f=>!deletedFolders.has(f.id));
  const ids=new Set(visibleFolders.map(f=>f.id));
- return {folders:visibleFolders,posts:[...posts.values()].filter(p=>ids.has(p.folder)&&!deletedPosts.has(p.id)).map(p=>({...p,photos:[...photos.values()].filter(m=>m.post===p.id&&m.author===p.author&&!deletedPhotos.has(m.id)),likes:[...likes.values()].filter(l=>l.post===p.id&&l.liked).map(l=>l.author),comments:[...comments.values()].filter(c=>c.post===p.id&&!deletedComments.has(JSON.stringify([c.id,c.author]))).sort((a,b)=>a.time-b.time||a.id.localeCompare(b.id))})).sort((a,b)=>b.time-a.time||a.id.localeCompare(b.id))};
+ // A folder-scoped operation makes moving a heart atomic on both devices.
+ // Replay older per-post hearts too, keeping only the latest choice per person.
+ const choices=new Map();
+ for(const o of ordered(ops)){
+  if(o.kind!=='place-choice'&&o.kind!=='place-like')continue;
+  const post=o.kind==='place-like'?posts.get(o.activity):null,folder=post?.folder||o.activity,key=JSON.stringify([folder,o.author]);
+  if(o.kind==='place-choice')choices.set(key,{id:o.id,folder,author:o.author,post:o.data.post});
+  else if(post&&(o.data.liked||choices.get(key)?.post===post.id))choices.set(key,{id:o.id,folder,author:o.author,post:o.data.liked?post.id:null});
+ }
+ const selected=[...choices.values()].filter(c=>ids.has(c.folder)&&c.post&&posts.get(c.post)?.folder===c.folder&&!deletedPosts.has(c.post));
+ return {folders:visibleFolders,choices:selected,posts:[...posts.values()].filter(p=>ids.has(p.folder)&&!deletedPosts.has(p.id)).map(p=>({...p,photos:[...photos.values()].filter(m=>m.post===p.id&&m.author===p.author&&!deletedPhotos.has(m.id)),likes:selected.filter(c=>c.post===p.id).map(c=>c.author).sort(),comments:[...comments.values()].filter(c=>c.post===p.id&&!deletedComments.has(JSON.stringify([c.id,c.author]))).sort((a,b)=>a.time-b.time||a.id.localeCompare(b.id))})).sort((a,b)=>b.time-a.time||a.id.localeCompare(b.id))};
 }
 function activities(ops){return project(ops).memories;}
 function profileChanges(profiles,owner,baseline,draft,allowPartnerPhoto=false){
