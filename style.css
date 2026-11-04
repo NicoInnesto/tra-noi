@@ -440,3 +440,46 @@ dialog.place-match{position:relative;text-align:center;width:min(calc(100% - 40p
 @keyframes heart-meet-right{from{opacity:0;transform:translateX(65px) rotate(25deg) scale(.7)}to{opacity:1;transform:translateX(-14px) rotate(12deg) scale(1)}}
 @media(prefers-reduced-motion:reduce){.place-match[open] .place-match-hearts span{animation:none}}
 @media(max-height:640px){.place-feed-copy .place-post-title h2{font-size:23px}.place-feed-copy .place-feed-description,.place-proposed-by{display:none}.place-feed .place-feed-copy{padding-bottom:12px}.place-feed .place-social{bottom:12px;gap:10px}}
+
+/* Edge-to-edge Explore canvas; the rest of the app keeps its regular header. */
+.explore-fullscreen .app-shell{padding:0;max-width:none}
+.explore-fullscreen .page-stage{position:absolute;inset:0;grid-row:auto}
+.explore-fullscreen .page-stage>#view.places-screen{padding:0;background:#100b15}
+.explore-fullscreen .app-header{position:absolute;inset:0 0 auto;z-index:4;min-height:0;height:calc(70px + env(safe-area-inset-top));padding:calc(10px + env(safe-area-inset-top)) 22px 10px;align-items:flex-start;pointer-events:none;background:linear-gradient(180deg,#100918bb,transparent);isolation:auto}
+.explore-fullscreen .app-header>*{pointer-events:auto}
+.explore-fullscreen .app-header>.world-brand{top:0;font-size:22px;line-height:1.06;letter-spacing:-.65px;color:#fff;text-shadow:0 1px 8px #0008}
+.explore-fullscreen .world-brand em{color:#f1b3d0}
+.explore-fullscreen .app-header>.header-actions{top:0}
+.explore-fullscreen .profile-corner{width:34px;flex-basis:34px}
+.explore-fullscreen .avatar-button{width:34px;height:34px}
+.explore-fullscreen .profile-corner .partner-status{width:76px;max-width:76px;min-height:0;margin-top:4px;padding:0;color:#f1e3ec;font-size:8px;line-height:1.2;text-shadow:0 1px 5px #000}
+.explore-fullscreen .profile-corner #offlineSummary{color:inherit}
+.explore-fullscreen .places-page.places-explore{position:relative;max-width:none;height:100%;margin:0}
+.explore-fullscreen .places-explore .place-feed{position:absolute;inset:0;width:100%;height:100%;min-height:0;max-width:none;border-radius:0}
+.explore-fullscreen .place-feed .place-feed-card{border-radius:0;border:0}
+.explore-fullscreen .place-feed:focus{outline:none}
+.explore-fullscreen .places-explore .place-modes{position:absolute;z-index:5;top:calc(69px + env(safe-area-inset-top));left:12px;right:12px;margin:0 auto;padding:0;width:max-content;max-width:calc(100% - 24px);gap:5px;background:transparent;border:0;border-radius:0}
+.explore-fullscreen .places-explore .place-modes button{position:relative;flex:0 1 auto;min-height:38px;padding:6px 15px 11px;border-radius:0;font-size:13px;font-weight:500;color:#ffffffb3;text-shadow:0 1px 6px #000}
+.explore-fullscreen .places-explore .place-modes button.active{background:transparent;color:#fff;font-weight:700}
+.explore-fullscreen .places-explore .place-modes button.active:after{content:"";position:absolute;bottom:3px;left:calc(50% - 12px);width:24px;height:3px;border-radius:3px;background:#fff}
+.explore-fullscreen .places-explore .place-modes svg{display:none}
+.explore-fullscreen .place-feed-filter{position:absolute;z-index:5;top:calc(119px + env(safe-area-inset-top));left:18px;max-width:calc(100% - 92px);width:auto;margin:0}
+.explore-fullscreen .place-feed-filter select{width:auto;max-width:100%;height:31px;min-height:31px;padding:4px 28px 4px 11px;border-radius:20px;border:1px solid #ffffff2b;background:#140d1e70;color:#fff;font-size:11px;text-overflow:ellipsis}
+.explore-fullscreen .place-feed-filter option{background:#24182c;color:#fff}
+.explore-fullscreen .place-feed-card:after{background:linear-gradient(180deg,#10091899,transparent 28%,transparent 45%,#100918b8 77%,#100918ed)}
+.explore-fullscreen .place-feed .place-feed-copy{left:0;right:63px;bottom:calc(99px + env(safe-area-inset-bottom));padding:18px 10px 12px 20px}
+.explore-fullscreen .place-feed .place-social{right:12px;bottom:calc(126px + env(safe-area-inset-bottom));gap:20px}
+.explore-fullscreen .place-social button{min-width:46px;min-height:54px;gap:5px;color:#fff}
+.explore-fullscreen .place-social svg{display:block;width:34px;height:34px;flex:none;filter:none;stroke:currentColor;stroke-width:1.9}
+.explore-fullscreen .place-social button.is-liked{color:#ff9fcd}
+.explore-fullscreen .place-feed .place-photo-count{top:calc(124px + env(safe-area-inset-top));right:16px;padding:5px 8px;font-size:9px}
+.explore-fullscreen .bottom-nav{background:linear-gradient(145deg,#32233b99,#21152cc7 65%);border-color:#edcee344}
+.explore-fullscreen .place-feed-empty{position:absolute;inset:0;margin:0;padding:calc(165px + env(safe-area-inset-top)) 24px calc(115px + env(safe-area-inset-bottom));border:0;border-radius:0;background:radial-gradient(ellipse at 20% 10%,#62416666,transparent 65%),#170e1d;color:#fff}
+.explore-fullscreen .place-feed-empty p{color:#d6c3d7}
+@media(min-width:760px){.explore-fullscreen .app-shell{max-width:680px}}
+@media(max-height:640px){.explore-fullscreen .place-feed .place-feed-copy{bottom:calc(88px + env(safe-area-inset-bottom))}.explore-fullscreen .place-feed .place-social{bottom:calc(101px + env(safe-area-inset-bottom));gap:12px}}
+
+/* Keep the folder chevron inside its pill on Safari as well. */
+.explore-fullscreen .place-feed-filter{max-width:calc(100% - 140px)}
+.explore-fullscreen .place-feed-filter select{appearance:none;-webkit-appearance:none;display:block;padding-right:33px}
+.explore-fullscreen .place-feed-filter:after{content:"";position:absolute;right:13px;top:11px;width:6px;height:6px;border-right:1.5px solid #fff;border-bottom:1.5px solid #fff;transform:rotate(45deg);pointer-events:none}

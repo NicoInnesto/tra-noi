@@ -1,7 +1,7 @@
 'use strict';
 window.diaryBoot=window.diaryBoot||{phase:'Caricamento del diario',ready:false};
-const VERSION=52;
-const RELEASE='1.8';
+const VERSION=54;
+const RELEASE='1.9';
 const WIRE_VERSION=42;
 const uuid=()=>crypto.randomUUID?crypto.randomUUID():([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g,c=>(c^crypto.getRandomValues(new Uint8Array(1))[0]&15>>c/4).toString(16));
 const $=id=>document.getElementById(id);
@@ -225,6 +225,7 @@ function render(){
  renderNavigation();
  updateView(({home:renderHome,ricordi:renderMemories,calendario:renderCalendar,lettere:renderLetters,countdown:renderCountdowns,giochi:renderGames,obiettivi:renderGoals,posti:renderPlaces}[view])());
  $('view').classList.toggle('places-screen',view==='posti'&&placesMode==='explore');
+ document.body.classList.toggle('explore-fullscreen',view==='posti'&&placesMode==='explore');
  const placesFeed=$('view').querySelector('[data-places-feed]');
  if(placesFeed&&placesFeed.dataset.feedKey===feedKey){const index=[...placesFeed.children].findIndex(n=>n.dataset.feedPost===feedAnchor);placesFeed.scrollTop=index>=0?index*placesFeed.clientHeight:placesScroll;}
  if($('placeDetailDialog').open)refreshPlacesDetail();

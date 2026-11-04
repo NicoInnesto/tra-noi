@@ -7,7 +7,7 @@ function placePrice(p){const total=placeTotal(p);return total===null?'Costo da d
 function placeFolderTitle(id){return state.places.folders.find(f=>f.id===id)?.title||'';}
 function placeLikeLabel(p){return p.likes.length===2?'Piace a entrambi':p.likes.length?'Piace a '+displayName(p.likes[0]):'';}
 function placeTabs(){
- return '<nav class="place-modes" aria-label="Esplora, sezioni">'+[['explore','compass','Esplora'],['manage','album','Cartelle'],['choices','heart','Scelte']].map(([mode,ic,label])=>'<button data-place-mode="'+mode+'" class="'+(placesMode===mode?'active':'')+'" aria-pressed="'+(placesMode===mode)+'">'+icon(ic)+label+'</button>').join('')+'</nav>';
+ return '<nav class="place-modes" aria-label="Esplora, sezioni">'+[['explore','compass','Esplora'],['manage','album','Cartelle'],['choices','heart','Preferiti']].map(([mode,ic,label])=>'<button data-place-mode="'+mode+'" class="'+(placesMode===mode?'active':'')+'" aria-pressed="'+(placesMode===mode)+'">'+icon(ic)+label+'</button>').join('')+'</nav>';
 }
 function renderPlaceFolder(f){
  const list=state.places.posts.filter(p=>p.folder===f.id),cover=list.find(p=>p.photos.length)?.photos[0];
@@ -23,7 +23,7 @@ function renderPlaces(){
  const heading='<div class="place-page-heading"><p class="eyebrow">LE PROSSIME COSE BELLE</p><h1>Dove <em>andiamo?</em></h1></div>';
  if(placesMode==='explore'){
   const filter='<label class="place-feed-filter"><span class="sr-only">Cartella da esplorare</span><select id="placeFeedFilter"><option value="">Tutte le cartelle</option>'+folders.map(f=>'<option value="'+esc(f.id)+'" '+(placesFolder===f.id?'selected':'')+'>'+esc(f.title)+'</option>').join('')+'</select></label>';
-  return '<section class="places-page places-explore"><h1 class="sr-only">Dove andiamo?</h1>'+placeTabs()+filter+(posts.length?'<div class="place-feed" data-places-feed data-feed-key="'+esc(placesFolder||'all')+'" tabindex="0" aria-label="Proposte da scorrere">'+posts.map(renderPlaceFeedPost).join('')+'</div>':'<div class="place-feed-empty">'+icon('compass')+'<h1>Dove andiamo?</h1><p>'+(folder?'Questa cartella aspetta la prima proposta':'Le prossime idee iniziano da una cartella')+'</p><button class="primary" data-place-mode="manage">Crea le nostre proposte</button></div>')+'</section>';
+  return '<section class="places-page places-explore"><h1 class="sr-only">Dove andiamo?</h1>'+placeTabs()+filter+(posts.length?'<div class="place-feed" data-places-feed data-feed-key="'+esc(placesFolder||'all')+'" aria-label="Proposte da scorrere">'+posts.map(renderPlaceFeedPost).join('')+'</div>':'<div class="place-feed-empty">'+icon('compass')+'<h1>Dove andiamo?</h1><p>'+(folder?'Questa cartella aspetta la prima proposta':'Le prossime idee iniziano da una cartella')+'</p><button class="primary" data-place-mode="manage">Crea le nostre proposte</button></div>')+'</section>';
  }
  if(placesMode==='choices'){
   return '<section class="places-page">'+heading+placeTabs()+'<p class="place-choice-intro">Una scelta a testa, per ogni cartella</p><div class="place-choices">'+folders.map(f=>{
