@@ -23,7 +23,7 @@ function device(author,seed,policy,options={}){
   render(){},scheduleSyncRender(){},refreshSyncIndicators(){},toast(message){errors.push(message);}
  };
  vm.createContext(context);
- vm.runInContext("let ops=seed,acks=new Set(),preparedBackup=null,accessPolicy=policy,peerPerson='',syncStarted=false,channel,pollTimer,sendTail=Promise.resolve(),peerName='';const people=DiaryModel.people,sessionTicket='test-shared-ticket',WIRE_VERSION=42,transfers=new Map(),uuid=()=>crypto.randomUUID();",context);
+ vm.runInContext("let ops=seed,acks=new Set(),preparedBackup=null,accessPolicy=policy,peerPerson='',syncStarted=false,channel,pollTimer,sendTail=Promise.resolve(),peerName='';const people=DiaryModel.people,sessionTicket='test-shared-ticket',WIRE_VERSION=43,transfers=new Map(),uuid=()=>crypto.randomUUID();",context);
  vm.runInContext(merge+network,context);
  const channel={readyState:'open',bufferedAmount:0,send(raw){outgoing.push(raw);}};
  context.testChannel=channel;vm.runInContext('bindChannel(testChannel);',context);
@@ -36,7 +36,7 @@ async function waitUntil(test,label,timeout=2500){const start=Date.now();while(!
 (async()=>{
  const common=op('one','create','memory',{section:'experiences',category:'Cinema',title:'Film di prova',date:''});
  const d=device('one',[common],null);d.channel.bufferedAmount=300000;
- d.frame({type:'hello-ok',protocol:42,inventory:[],ticket:'test-shared-ticket',person:'two',name:'Test 2'});
+ d.frame({type:'hello-ok',protocol:43,inventory:[],ticket:'test-shared-ticket',person:'two',name:'Test 2'});
  await pause(20);
  const rating=op('two','rating','memory',{score:9.25,comment:'Voto ricevuto'});
  d.frame({type:'op',op:rating});
@@ -123,6 +123,7 @@ async function waitUntil(test,label,timeout=2500){const start=Date.now();while(!
    own('place-like','post',{liked:true}),
    own('place-choice','folder',{post:person+'-post'}),
    own('place-comment','comment',{post:person+'-post',body:'Mi piace questa idea'}),
+   own('place-comment','reply',{post:person+'-post',body:'Ci sto!',replyTo:person+'-comment'}),
    own('category','category',{name:'Categoria '+person}),
    own('create','experience',{section:'experiences',category:'Categoria '+person,title:'Esperienza',date:'2026-10-29'}),
    own('rating','experience',{score:6.5,comment:'Commento personale'}),
@@ -169,7 +170,7 @@ async function waitUntil(test,label,timeout=2500){const start=Date.now();while(!
  // A failed transaction must never be acknowledged or called a completed sync.
  const refused=op('one','rating','memory',{score:5,comment:'Prova salvataggio'});
  const j=device('two',[common],null,{failId:refused.id});
- j.frame({type:'hello',protocol:42,inventory:[common.id],ticket:'test-shared-ticket',person:'one',name:'Test 1'});
+ j.frame({type:'hello',protocol:43,inventory:[common.id],ticket:'test-shared-ticket',person:'one',name:'Test 1'});
  await pause(10);j.frame({type:'op',op:refused});await pause(30);
  assert(!j.tables.ops.has(refused.id));assert(j.channel.transferFailed);assert(!j.channel.verified);
  assert(!j.outgoing.some(raw=>{try{const value=JSON.parse(JSON.parse(raw).chunk);return value.type==='ack'&&value.id===refused.id;}catch{return false;}}));

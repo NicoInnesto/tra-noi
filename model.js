@@ -117,7 +117,11 @@ function validateOp(o){
  if(o.kind==='place-photo')ok=shortId(o.activity)&&image(d.url)&&!!d.url&&text(d.name,300)&&Object.keys(d).length===2;
  if(o.kind==='place-like')ok=shortId(o.activity)&&typeof d.liked==='boolean'&&Object.keys(d).length===1;
  if(o.kind==='place-choice')ok=shortId(o.activity)&&(d.post===null||shortId(d.post))&&Object.keys(d).length===1;
- if(o.kind==='place-comment')ok=shortId(o.activity)&&shortId(d.post)&&text(d.body,2000)&&!!d.body.trim()&&Object.keys(d).length===2;
+ if(o.kind==='place-comment'){
+  const reply=Object.hasOwn(d,'replyTo');
+  ok=shortId(o.activity)&&shortId(d.post)&&text(d.body,2000)&&!!d.body.trim()&&
+   Object.keys(d).length===(reply?3:2)&&(!reply||shortId(d.replyTo)&&d.replyTo!==o.activity);
+ }
  if(o.kind==='place-delete-photo')ok=shortId(o.activity)&&shortId(d.mediaId)&&Object.keys(d).length===1;
  if(['place-delete-folder','place-delete-post','place-delete-comment'].includes(o.kind))ok=shortId(o.activity)&&Object.keys(d).length===0;
  if(o.kind.startsWith('place-'))ok=ok&&Object.hasOwn(people,o.author);
@@ -133,7 +137,11 @@ function projectPlaces(ops){
   if(o.kind==='place-delete-post')deletedPosts.add(o.activity);
   if(o.kind==='place-photo')photos.set(o.id,{id:o.id,post:o.activity,author:o.author,...d});
   if(o.kind==='place-delete-photo')deletedPhotos.add(d.mediaId);
-  if(o.kind==='place-comment'){const old=comments.get(o.activity);if(!old||old.author===o.author)comments.set(o.activity,{id:o.activity,author:o.author,time:old?.time||o.time,...d});}
+  if(o.kind==='place-comment'){
+   const original=comments.get(o.activity);
+   if(!original)comments.set(o.activity,{id:o.activity,author:o.author,time:o.time,...d});
+   else if(original.author===o.author)comments.set(o.activity,{...original,body:d.body});
+  }
   if(o.kind==='place-delete-comment')deletedComments.add(JSON.stringify([o.activity,o.author]));
  }
  const visibleFolders=[...folders.values()].filter(f=>!deletedFolders.has(f.id));

@@ -1,8 +1,8 @@
 'use strict';
 window.diaryBoot=window.diaryBoot||{phase:'Caricamento del diario',ready:false};
-const VERSION=54;
-const RELEASE='1.9';
-const WIRE_VERSION=42;
+const VERSION=55;
+const RELEASE='1.10';
+const WIRE_VERSION=43;
 const uuid=()=>crypto.randomUUID?crypto.randomUUID():([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g,c=>(c^crypto.getRandomValues(new Uint8Array(1))[0]&15>>c/4).toString(16));
 const $=id=>document.getElementById(id);
 const storagePrefix='tra-noi:'+new URL('./',location.href).pathname+':';
@@ -216,7 +216,8 @@ function updateStorageUsage(){
 function render(){
  for(const panel of $('view').querySelectorAll('[data-goal-group]')){if(panel.open)goalPanelsOpen.add(panel.dataset.goalGroup);else goalPanelsOpen.delete(panel.dataset.goalGroup);}
  const oldFeed=$('view').querySelector('[data-places-feed]'),placesScroll=oldFeed?.scrollTop||0;
- const feedAnchor=oldFeed?.children[Math.round(placesScroll/Math.max(1,oldFeed.clientHeight))]?.dataset.feedPost,feedKey=oldFeed?.dataset.feedKey;
+ const feedAnchor=oldFeed?.children[Math.round(placesScroll/Math.max(1,oldFeed.clientHeight))];
+ const feedKey=oldFeed?.dataset.feedKey;
  const oldTabs=$('view').querySelector('.collection-tabs'),oldChips=$('view').querySelector('.chips');
  if(oldTabs)collectionScroll.tabs=oldTabs.scrollLeft;
  if(oldChips)collectionScroll.chips=oldChips.scrollLeft;
@@ -227,7 +228,12 @@ function render(){
  $('view').classList.toggle('places-screen',view==='posti'&&placesMode==='explore');
  document.body.classList.toggle('explore-fullscreen',view==='posti'&&placesMode==='explore');
  const placesFeed=$('view').querySelector('[data-places-feed]');
- if(placesFeed&&placesFeed.dataset.feedKey===feedKey){const index=[...placesFeed.children].findIndex(n=>n.dataset.feedPost===feedAnchor);placesFeed.scrollTop=index>=0?index*placesFeed.clientHeight:placesScroll;}
+ if(placesFeed&&placesFeed.dataset.feedKey===feedKey){
+  const index=feedAnchor?.hasAttribute('data-feed-end')
+   ?placesFeed.children.length-1
+   :[...placesFeed.children].findIndex(n=>n.dataset.feedPost===feedAnchor?.dataset.feedPost&&n.hasAttribute('data-feed-post'));
+  placesFeed.scrollTop=index>=0?index*placesFeed.clientHeight:placesScroll;
+ }
  if($('placeDetailDialog').open)refreshPlacesDetail();
  if($('placeCommentsDialog').open)refreshPlaceComments();
  observePlaceMatches();

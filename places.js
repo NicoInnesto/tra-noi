@@ -1,5 +1,6 @@
 'use strict';
-let placesFolder=null,placesMode='explore',placeEditing=null,folderEditing=null,placePhotos=[],placeCommentEditing=null,placeActive=null,placeCommentPost=null;
+let placesFolder=null,placesMode='explore',placeEditing=null,folderEditing=null,placePhotos=[],placeCommentEditing=null,placeActive=null,placeCommentPost=null,placeCommentReply=null;
+const placeCommentDate=new Intl.DateTimeFormat('it-IT',{dateStyle:'medium'});
 const placeMoney=new Intl.NumberFormat('it-IT',{style:'currency',currency:'EUR'});
 function placePost(id){return state.places.posts.find(p=>p.id===id);}
 function placeTotal(p){const values=p.kind==='trip'?[p.budget.travel,p.budget.stay,p.budget.extra]:[p.budget.expected];return values.every(v=>v===null)?null:values.reduce((a,b)=>a+(b||0),0);}
@@ -23,7 +24,7 @@ function renderPlaces(){
  const heading='<div class="place-page-heading"><p class="eyebrow">LE PROSSIME COSE BELLE</p><h1>Dove <em>andiamo?</em></h1></div>';
  if(placesMode==='explore'){
   const filter='<label class="place-feed-filter"><span class="sr-only">Cartella da esplorare</span><select id="placeFeedFilter"><option value="">Tutte le cartelle</option>'+folders.map(f=>'<option value="'+esc(f.id)+'" '+(placesFolder===f.id?'selected':'')+'>'+esc(f.title)+'</option>').join('')+'</select></label>';
-  return '<section class="places-page places-explore"><h1 class="sr-only">Dove andiamo?</h1>'+placeTabs()+filter+(posts.length?'<div class="place-feed" data-places-feed data-feed-key="'+esc(placesFolder||'all')+'" aria-label="Proposte da scorrere">'+posts.map(renderPlaceFeedPost).join('')+'</div>':'<div class="place-feed-empty">'+icon('compass')+'<h1>Dove andiamo?</h1><p>'+(folder?'Questa cartella aspetta la prima proposta':'Le prossime idee iniziano da una cartella')+'</p><button class="primary" data-place-mode="manage">Crea le nostre proposte</button></div>')+'</section>';
+  return '<section class="places-page places-explore"><h1 class="sr-only">Dove andiamo?</h1>'+placeTabs()+filter+(posts.length?'<div class="place-feed" data-places-feed data-feed-key="'+esc(placesFolder||'all')+'" aria-label="Proposte da scorrere">'+posts.map(renderPlaceFeedPost).join('')+'<div class="place-feed-end" data-feed-end><p>Sembra non ci sia altro</p></div></div>':'<div class="place-feed-empty">'+icon('compass')+'<h1>Dove andiamo?</h1><p>'+(folder?'Questa cartella aspetta la prima proposta':'Le prossime idee iniziano da una cartella')+'</p><button class="primary" data-place-mode="manage">Crea le nostre proposte</button></div>')+'</section>';
  }
  if(placesMode==='choices'){
   return '<section class="places-page">'+heading+placeTabs()+'<p class="place-choice-intro">Una scelta a testa, per ogni cartella</p><div class="place-choices">'+folders.map(f=>{
@@ -46,10 +47,13 @@ function updatePlacesView(markup){
  const root=$('view'),template=document.createElement('template');template.innerHTML=markup;
  const nextFeed=template.content.querySelector('[data-places-feed]'),feed=root.querySelector('[data-places-feed]');
  if(nextFeed){
-  const cards=[...nextFeed.children];nextFeed.replaceChildren();const frame=template.innerHTML;
+  const cards=[...nextFeed.querySelectorAll('[data-feed-post]')];
+  for(const card of cards)card.remove();
+  const frame=template.innerHTML;
   if(feed&&placesPageFrame===frame){
-   const old=new Map([...feed.children].map(n=>[n.dataset.feedPost,n])),ids=new Set(cards.map(n=>n.dataset.feedPost));
-   for(const card of [...feed.children])if(!ids.has(card.dataset.feedPost))card.remove();
+   const old=new Map([...feed.querySelectorAll('[data-feed-post]')].map(n=>[n.dataset.feedPost,n]));
+   const ids=new Set(cards.map(n=>n.dataset.feedPost));
+   for(const [id,card]of old)if(!ids.has(id))card.remove();
    for(const [i,next]of cards.entries()){
     const card=old.get(next.dataset.feedPost)||next;
     if(card!==next)for(const selector of ['.place-feed-media','.place-feed-copy','.place-social','.place-photo-count']){
@@ -100,22 +104,90 @@ function refreshPlacesDetail(){
  const markup='<p class="eyebrow">'+esc(placeFolderTitle(p.folder))+'</p><h2>'+esc(p.title)+'</h2>'+(p.photos.length?'<div class="place-gallery" aria-label="Foto della proposta">'+p.photos.map(m=>'<button data-place-photo="'+esc(m.id)+'" aria-label="Apri foto"><img loading="lazy" src="'+esc(m.url)+'" alt="'+esc(m.name)+'"></button>').join('')+'</div>':'')+'<p class="place-detail-description">'+esc(p.description)+'</p><div class="place-costs">'+rows.map(([label,value])=>'<p><span>'+label+'</span><strong>'+(value===null?'Da definire':placeMoney.format(value/100))+'</strong></p>').join('')+'<p class="place-cost-total"><span>Totale previsto</span><strong>'+esc(placePrice(p))+'</strong></p></div><div class="place-detail-social"><button class="secondary '+(p.likes.includes(author)?'is-liked':'')+'" data-place-like="'+esc(p.id)+'" aria-pressed="'+p.likes.includes(author)+'">'+icon('heart')+(p.likes.includes(author)?'La tua scelta':'Scegli questa proposta')+'</button><button class="secondary" data-place-comments="'+esc(p.id)+'">'+icon('chat')+'Commenti ('+p.comments.length+')</button></div><p class="place-likes">'+esc(placeLikeLabel(p))+'</p>'+(p.author===author?'<button class="text-button" data-place-edit="'+esc(p.id)+'">'+icon('pencil')+'Modifica proposta</button>':'');
  if($('placeDetailContent').innerHTML!==markup){const x=$('placeDetailContent').querySelector('.place-gallery')?.scrollLeft||0;$('placeDetailContent').innerHTML=markup;const gallery=$('placeDetailContent').querySelector('.place-gallery');if(gallery)gallery.scrollLeft=x;}
 }
+function resetPlaceCommentDraft(){
+ placeCommentEditing=null;
+ placeCommentReply=null;
+ $('placeCommentBody').value='';
+}
 function openPlaceComments(id){
  if(!placePost(id))return;
- placeCommentPost=id;placeCommentEditing=null;$('placeCommentBody').value='';
- refreshPlaceComments();$('placeCommentsDialog').showModal();
+ placeCommentPost=id;
+ resetPlaceCommentDraft();
+ $('placeCommentList').replaceChildren();
+ refreshPlaceComments();
+ $('placeCommentsDialog').showModal();
 }
-function refreshPlaceComments(){
+function renderPlaceComment(comment,parent){
+ const id=esc(comment.id),date=new Date(comment.time);
+ const timestamp=Number.isFinite(date.getTime())
+  ?'<time datetime="'+date.toISOString()+'">'+esc(placeCommentDate.format(date))+'</time>'
+  :'';
+ const target=parent?'<span class="place-reply-to">in risposta a '+esc(displayName(parent.author))+'</span>':'';
+ const actions=comment.author===author
+  ?'<button type="button" class="text-button" data-place-edit-comment="'+id+'">Modifica</button><button type="button" class="text-button danger-button" data-place-delete-comment="'+id+'">Elimina</button>'
+  :'';
+ return '<article class="place-comment" data-place-comment="'+id+'">'+
+  '<span class="place-comment-avatar" aria-hidden="true">'+avatar(state.profiles[comment.author])+'</span>'+
+  '<div><strong>'+esc(displayName(comment.author))+'</strong>'+target+'<p>'+esc(comment.body)+'</p>'+
+  '<div class="place-comment-actions">'+timestamp+
+  '<button type="button" class="text-button" data-place-reply-comment="'+id+'">Rispondi</button>'+actions+
+  '</div></div></article>';
+}
+function renderPlaceCommentThreads(comments,openThreads){
+ // A reply follows the comment it references in the chronological list.
+ const byId=new Map(),threadByComment=new Map(),threads=[];
+ for(const comment of comments){
+  const parentThread=threadByComment.get(comment.replyTo);
+  if(parentThread){
+   parentThread.replies.push({comment,parent:byId.get(comment.replyTo)});
+   threadByComment.set(comment.id,parentThread);
+  }else{
+   const thread={root:comment,replies:[]};
+   threads.push(thread);
+   threadByComment.set(comment.id,thread);
+  }
+  byId.set(comment.id,comment);
+ }
+ return threads.map(({root,replies})=>{
+  let markup='<section class="place-comment-thread">'+renderPlaceComment(root);
+  if(replies.length){
+   const expanded=openThreads.has(root.id)||replies.some(({comment})=>openThreads.has(comment.id));
+   const label=replies.length===1?'Vedi 1 risposta':'Vedi '+replies.length+' risposte';
+   markup+='<details class="place-comment-replies" data-place-thread="'+esc(root.id)+'"'+(expanded?' open':'')+'>'+
+    '<summary><span class="place-replies-show">'+label+'</span><span class="place-replies-hide">Nascondi risposte</span></summary>'+
+    replies.map(({comment,parent})=>renderPlaceComment(comment,parent)).join('')+'</details>';
+  }
+  return markup+'</section>';
+ }).join('');
+}
+function refreshPlaceComments(revealReply){
  if(!placeCommentPost)return;
- const p=placePost(placeCommentPost);
- if(!p){if($('placeCommentsDialog').open)$('placeCommentsDialog').close();return;}
- $('placeCommentsTitle').textContent=p.comments.length+' '+(p.comments.length===1?'commento':'commenti');
- $('placeCommentsPost').textContent=p.title;
- const markup=p.comments.map(c=>'<article class="place-comment"><span class="place-comment-avatar">'+avatar(state.profiles[c.author])+'</span><div><strong>'+esc(displayName(c.author))+'</strong><p>'+esc(c.body)+'</p>'+(c.author===author?'<div class="button-row"><button class="text-button" data-place-edit-comment="'+esc(c.id)+'">Modifica</button><button class="text-button danger-button" data-place-delete-comment="'+esc(c.id)+'">Elimina</button></div>':'')+'</div></article>').join('')||'<div class="place-comments-empty">'+icon('chat')+'<p>Che ne pensi di questa proposta?</p></div>';
- if($('placeCommentList').innerHTML!==markup)$('placeCommentList').innerHTML=markup;
- if(placeCommentEditing&&!p.comments.some(c=>c.id===placeCommentEditing)){placeCommentEditing=null;$('placeCommentBody').value='';}
+ const post=placePost(placeCommentPost);
+ if(!post){
+  if($('placeCommentsDialog').open)$('placeCommentsDialog').close();
+  return;
+ }
+ $('placeCommentsTitle').textContent=post.comments.length+' '+(post.comments.length===1?'commento':'commenti');
+ $('placeCommentsPost').textContent=post.title;
+ const list=$('placeCommentList');
+ const openThreads=new Set([...list.querySelectorAll('details[open][data-place-thread]')].map(node=>node.dataset.placeThread));
+ if(revealReply)openThreads.add(revealReply);
+ const markup=renderPlaceCommentThreads(post.comments,openThreads)||
+  '<div class="place-comments-empty">'+icon('chat')+'<p>Che ne pensi di questa proposta?</p></div>';
+ if(list.innerHTML!==markup)list.innerHTML=markup;
+ if(revealReply){
+  const reply=[...list.querySelectorAll('[data-place-comment]')].find(node=>node.dataset.placeComment===revealReply);
+  reply?.scrollIntoView({block:'nearest'});
+ }
+ if(placeCommentEditing&&!post.comments.some(comment=>comment.id===placeCommentEditing))resetPlaceCommentDraft();
+ const replyTarget=post.comments.find(comment=>comment.id===placeCommentReply);
+ let context='';
+ if(placeCommentEditing)context='Modifica commento';
+ else if(placeCommentReply)context=replyTarget?'Rispondi a '+displayName(replyTarget.author):'Il commento originale è stato rimosso';
+ $('placeCommentContext').hidden=!context;
+ $('placeCommentContextLabel').textContent=context;
  $('placeCommentSave').textContent=placeCommentEditing?'Salva':'Invia';
- $('placeCommentCancel').hidden=!placeCommentEditing;
+ $('placeCommentBody').placeholder=placeCommentReply?'Scrivi una risposta…':'Scrivi un commento…';
 }
 async function togglePlaceChoice(id){
  const p=placePost(id);if(!p)return;
@@ -169,7 +241,25 @@ function initPlaces(){
   if(b.dataset.placeRemoveDraft!==undefined){placePhotos.splice(Number(b.dataset.placeRemoveDraft),1);renderPlacePhotoDrafts();return;}
   if(b.dataset.placeDelete){const p=placePost(b.dataset.placeDelete);if(p?.author===author)confirmRemoval('Eliminare questa proposta?','Foto, cuori e commenti della proposta saranno eliminati anche dall’altro account al prossimo scambio.',async()=>{await addOp('place-delete-post',p.id,{});});return;}
   if(b.dataset.placeDeleteFolder){const id=b.dataset.placeDeleteFolder;confirmRemoval('Eliminare questa cartella?','Saranno eliminate anche tutte le proposte contenute. La modifica verrà condivisa al prossimo collegamento.',()=>addOp('place-delete-folder',id,{}));return;}
-  if(b.dataset.placeEditComment){const c=placePost(placeCommentPost)?.comments.find(c=>c.id===b.dataset.placeEditComment);if(c?.author===author){placeCommentEditing=c.id;$('placeCommentBody').value=c.body;refreshPlaceComments();$('placeCommentBody').focus();}return;}
+  if(b.dataset.placeReplyComment){
+   const target=placePost(placeCommentPost)?.comments.find(comment=>comment.id===b.dataset.placeReplyComment);
+   if(!target)return;
+   if(placeCommentEditing)resetPlaceCommentDraft();
+   placeCommentReply=target.id;
+   refreshPlaceComments();
+   $('placeCommentBody').focus();
+   return;
+  }
+  if(b.dataset.placeEditComment){
+   const comment=placePost(placeCommentPost)?.comments.find(comment=>comment.id===b.dataset.placeEditComment);
+   if(comment?.author!==author)return;
+   placeCommentReply=null;
+   placeCommentEditing=comment.id;
+   $('placeCommentBody').value=comment.body;
+   refreshPlaceComments();
+   $('placeCommentBody').focus();
+   return;
+  }
   if(b.dataset.placeDeleteComment){const c=placePost(placeCommentPost)?.comments.find(c=>c.id===b.dataset.placeDeleteComment);if(c?.author===author)confirmRemoval('Eliminare il tuo commento?','La modifica verrà condivisa al prossimo scambio.',async()=>{await addOp('place-delete-comment',c.id,{});if(placeCommentEditing===c.id){placeCommentEditing=null;$('placeCommentBody').value='';refreshPlaceComments();}});}
  });
  $('placeFolderForm').onsubmit=async e=>{e.preventDefault();await withSave(e.submitter,async()=>{const id=folderEditing||uuid();await addOp('place-folder',id,{title:$('placeFolderName').value.trim()});placesFolder=id;placesMode='manage';$('placeFolderDialog').close();render();});};
@@ -186,10 +276,31 @@ function initPlaces(){
   for(const photo of placePhotos)if(!photo.id){const before=new Set(ops.map(o=>o.id));await addOp('place-photo',id,{url:photo.url,name:photo.name});photo.id=ops.find(o=>o.kind==='place-photo'&&o.activity===id&&!before.has(o.id))?.id;}
   placesFolder=folder;$('placePostEditor').close();render();toast('Proposta salvata');
  });};
- $('placeCommentForm').onsubmit=async e=>{e.preventDefault();await withSave(e.submitter,async()=>{const body=$('placeCommentBody').value.trim();if(!body||!placePost(placeCommentPost))return;await addOp('place-comment',placeCommentEditing||uuid(),{post:placeCommentPost,body});placeCommentEditing=null;$('placeCommentBody').value='';refreshPlaceComments();});};
- $('placeCommentCancel').onclick=()=>{placeCommentEditing=null;$('placeCommentBody').value='';refreshPlaceComments();};
+ $('placeCommentForm').onsubmit=async e=>{
+  e.preventDefault();
+  await withSave(e.submitter,async()=>{
+   const input=$('placeCommentBody'),body=input.value.trim(),post=placePost(placeCommentPost);
+   if(!body||!post)return;
+   const editing=placeCommentEditing,replying=placeCommentReply;
+   const original=post.comments.find(comment=>comment.id===editing);
+   if(editing&&original?.author!==author)throw Error('Il commento non è più disponibile');
+   if(replying&&!post.comments.some(comment=>comment.id===replying))throw Error('Il commento originale è stato rimosso');
+   const id=editing||uuid(),data={post:post.id,body};
+   const replyTo=original?.replyTo||replying;
+   if(replyTo)data.replyTo=replyTo;
+   await addOp('place-comment',id,data);
+   if(placeCommentPost!==post.id)return;
+   if(placeCommentEditing===editing&&placeCommentReply===replying&&input.value.trim()===body)resetPlaceCommentDraft();
+   refreshPlaceComments(replyTo?id:null);
+  });
+ };
+ $('placeCommentCancel').onclick=()=>{
+  if(placeCommentEditing)resetPlaceCommentDraft();
+  placeCommentReply=null;
+  refreshPlaceComments();
+ };
  $('placeDetailDialog').addEventListener('close',()=>{placeActive=null;});
- $('placeCommentsDialog').addEventListener('close',()=>{placeCommentPost=null;placeCommentEditing=null;$('placeCommentBody').value='';});
+ $('placeCommentsDialog').addEventListener('close',()=>{placeCommentPost=null;resetPlaceCommentDraft();});
  document.addEventListener('close',()=>setTimeout(showNextPlaceMatch,0),true);
  document.addEventListener('change',e=>{if(e.target.id==='placeFeedFilter'){placesFolder=e.target.value||null;render();}});
 }

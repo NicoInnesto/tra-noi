@@ -1,7 +1,7 @@
 'use strict';
-// Release 1.9 (build 54): edge-to-edge Explore photos with compact overlay controls.
-const VERSION=54,BASE=new URL('./',self.location.href),CACHE='tra-noi-pages-'+BASE.pathname+'-v54';
-const relative=['index.html?v=54','style.css?v=54','boot.js?v=54','model.js?v=54','offline.js?v=54','link.js?v=54','interaction.js?v=54','access.js?v=54','preferences.js?v=54','viewport.js?v=54','app.js?v=54','places.js?v=54','backup.js?v=54','manifest.json','manifest-one.json','manifest-two.json','icon.svg?v=54','icon-192.png?v=54','icon-512.png?v=54','apple-touch-icon.png?v=54','vendor/qrcode.js','vendor/jsqr.js','installazione.html','nuova-icona.html','manifest-icon.json'];
+// Release 1.10 (build 55): dated comment threads and the end of the Explore feed.
+const VERSION=55,BASE=new URL('./',self.location.href),CACHE='tra-noi-pages-'+BASE.pathname+'-v55';
+const relative=['index.html?v=55','style.css?v=55','boot.js?v=55','model.js?v=55','offline.js?v=55','link.js?v=55','interaction.js?v=55','access.js?v=55','preferences.js?v=55','viewport.js?v=55','app.js?v=55','places.js?v=55','backup.js?v=55','manifest.json','manifest-one.json','manifest-two.json','icon.svg?v=55','icon-192.png?v=55','icon-512.png?v=55','apple-touch-icon.png?v=55','vendor/qrcode.js','vendor/jsqr.js','installazione.html','nuova-icona.html','manifest-icon.json'];
 const ASSETS=relative.map(p=>new URL(p,BASE).href),SHELL=ASSETS[0];
 self.addEventListener('install',e=>e.waitUntil((async()=>{const cache=await caches.open(CACHE);await cache.addAll(ASSETS);await self.skipWaiting();})()));
 self.addEventListener('activate',e=>e.waitUntil((async()=>{for(const key of await caches.keys())if(key!==CACHE&&key.startsWith('tra-noi-pages-'+BASE.pathname+'-v'))await caches.delete(key);await self.clients.claim();})()));
