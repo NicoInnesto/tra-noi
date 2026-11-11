@@ -4,6 +4,7 @@ const root=path.resolve(__dirname,'..');
 const {webcrypto}=require('node:crypto');
 const Model=require(path.join(root,'model.js')),Access=require(path.join(root,'access.js'));
 const source=fs.readFileSync(path.join(root,'app.js'),'utf8');
+const pending=source.match(/^function pending\(id\).*$/m)[0];
 const merge=source.slice(source.indexOf('function store(name,value)'),source.indexOf('async function init(){'));
 const network=source.slice(source.indexOf('function transferError('),source.indexOf('async function description('));
 const pause=ms=>new Promise(r=>setTimeout(r,ms));
@@ -23,8 +24,8 @@ function device(author,seed,policy,options={}){
   render(){},scheduleSyncRender(){},refreshSyncIndicators(){},toast(message){errors.push(message);}
  };
  vm.createContext(context);
- vm.runInContext("let ops=seed,acks=new Set(),preparedBackup=null,accessPolicy=policy,peerPerson='',syncStarted=false,channel,pollTimer,sendTail=Promise.resolve(),peerName='';const people=DiaryModel.people,sessionTicket='test-shared-ticket',WIRE_VERSION=43,transfers=new Map(),uuid=()=>crypto.randomUUID();",context);
- vm.runInContext(merge+network,context);
+ vm.runInContext("let ops=seed,acks=new Set(),state=null,preparedBackup=null,accessPolicy=policy,peerPerson='',syncStarted=false,channel,pollTimer,sendTail=Promise.resolve(),peerName='';const people=DiaryModel.people,sessionTicket='test-shared-ticket',WIRE_VERSION=43,transfers=new Map(),uuid=()=>crypto.randomUUID();",context);
+ vm.runInContext(merge+pending+network,context);
  const channel={readyState:'open',bufferedAmount:0,send(raw){outgoing.push(raw);}};
  context.testChannel=channel;vm.runInContext('bindChannel(testChannel);',context);
  return {context,channel,tables,errors,outgoing,
@@ -104,13 +105,22 @@ async function waitUntil(test,label,timeout=2500){const start=Date.now();while(!
  console.log('PASS: voto mancante, foto mancante, ACK vecchi, messaggio perso e conferma persa recuperati');
  // A fresh connection uses the saved inventory, so unchanged photos are not resent.
  const f=device('one',[...c.tables.ops.values()],created.policy),g=device('two',[...e.tables.ops.values()],created.policy);
+ assert.equal(vm.runInContext("pending('memory')",f.context),true,'prima del collegamento mancano le conferme locali');
  let resentPhotos=0;
  const reconnectWire=(to)=>raw=>{if(JSON.parse(raw).chunk.includes('"kind":"media"'))resentPhotos++;setTimeout(()=>to.channel.onmessage({data:raw}),0);};
  f.channel.send=reconnectWire(g);g.channel.send=reconnectWire(f);
  await Promise.all([f.channel.onopen(),g.channel.onopen()]);
  await waitUntil(()=>f.channel.verified&&g.channel.verified,'verifica dopo riapertura incompleta');
  assert.equal(resentPhotos,0);assert.equal(g.tables.ops.size,beforeReconnect);
- console.log('PASS: riapertura e confronto completo senza reinviare foto già presenti');
+ for(const device of [f,g]){
+  assert.equal(vm.runInContext("pending('memory')",device.context),false,'un ricordo presente su entrambi i dispositivi non deve risultare in attesa');
+  for(const id of device.tables.ops.keys())assert(device.tables.acks.has(id),'la conferma deve sopravvivere alla riapertura');
+ }
+ f.context.unsentEdit=op('one','memory-title','memory',{title:'Modifica ancora da condividere'});
+ await vm.runInContext('mergeOperations([unsentEdit])',f.context);
+ assert.equal(vm.runInContext("pending('memory')",f.context),true,'una nuova modifica deve restare in attesa');
+ assert(!f.tables.acks.has(f.context.unsentEdit.id));
+ console.log('PASS: conferme mancanti ricostruite al ricollegamento, senza reinviare le foto né segnare come inviate le nuove modifiche');
  for(const x of [c,e,f,g]){x.channel.readyState='closed';x.channel.onclose?.();clearTimeout(x.channel.helloTimer);}
  const tiny='data:image/png;base64,aGVsbG8=';
  const extras=person=>{

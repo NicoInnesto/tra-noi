@@ -1,7 +1,7 @@
 'use strict';
-// Release 1.10 (build 55): dated comment threads and the end of the Explore feed.
-const VERSION=55,BASE=new URL('./',self.location.href),CACHE='tra-noi-pages-'+BASE.pathname+'-v55';
-const relative=['index.html?v=55','style.css?v=55','boot.js?v=55','model.js?v=55','offline.js?v=55','link.js?v=55','interaction.js?v=55','access.js?v=55','preferences.js?v=55','viewport.js?v=55','app.js?v=55','places.js?v=55','backup.js?v=55','manifest.json','manifest-one.json','manifest-two.json','icon.svg?v=55','icon-192.png?v=55','icon-512.png?v=55','apple-touch-icon.png?v=55','vendor/qrcode.js','vendor/jsqr.js','installazione.html','nuova-icona.html','manifest-icon.json'];
+// Release 1.11 (build 56): recover sharing confirmations from the partner inventory.
+const VERSION=56,BASE=new URL('./',self.location.href),CACHE='tra-noi-pages-'+BASE.pathname+'-v56';
+const relative=['index.html?v=56','style.css?v=56','boot.js?v=56','model.js?v=56','offline.js?v=56','link.js?v=56','interaction.js?v=56','access.js?v=56','preferences.js?v=56','viewport.js?v=56','app.js?v=56','places.js?v=56','backup.js?v=56','manifest.json','manifest-one.json','manifest-two.json','icon.svg?v=56','icon-192.png?v=56','icon-512.png?v=56','apple-touch-icon.png?v=56','vendor/qrcode.js','vendor/jsqr.js','installazione.html','nuova-icona.html','manifest-icon.json'];
 const ASSETS=relative.map(p=>new URL(p,BASE).href),SHELL=ASSETS[0];
 self.addEventListener('install',e=>e.waitUntil((async()=>{const cache=await caches.open(CACHE);await cache.addAll(ASSETS);await self.skipWaiting();})()));
 self.addEventListener('activate',e=>e.waitUntil((async()=>{for(const key of await caches.keys())if(key!==CACHE&&key.startsWith('tra-noi-pages-'+BASE.pathname+'-v'))await caches.delete(key);await self.clients.claim();})()));

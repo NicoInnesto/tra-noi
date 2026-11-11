@@ -1,7 +1,7 @@
 'use strict';
 window.diaryBoot=window.diaryBoot||{phase:'Caricamento del diario',ready:false};
-const VERSION=55;
-const RELEASE='1.10';
+const VERSION=56;
+const RELEASE='1.11';
 const WIRE_VERSION=43;
 const uuid=()=>crypto.randomUUID?crypto.randomUUID():([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g,c=>(c^crypto.getRandomValues(new Uint8Array(1))[0]&15>>c/4).toString(16));
 const $=id=>document.getElementById(id);
@@ -113,6 +113,25 @@ function mergeOperations(incoming,administration=null){
  };
  const result=mutationTail.then(task);mutationTail=result.catch(()=>{});return result;
 }
+function confirmSharedOperations(peerIds){
+ const task=async()=>{
+  const confirmed=ops.filter(op=>peerIds.has(op.id)&&!acks.has(op.id)).map(op=>op.id);
+  if(!confirmed.length)return;
+  await new Promise((resolve,reject)=>{
+   const tx=db.transaction('acks','readwrite');
+   const confirmations=tx.objectStore('acks');
+   for(const id of confirmed)confirmations.put({id});
+   tx.oncomplete=resolve;
+   tx.onerror=()=>reject(tx.error);
+   tx.onabort=()=>reject(tx.error);
+  });
+  for(const id of confirmed)acks.add(id);
+  refreshSyncIndicators();
+ };
+ const result=mutationTail.then(task);
+ mutationTail=result.catch(()=>{});
+ return result;
+}
 async function init(){
  window.diaryBoot.phase='Apertura della memoria locale';
  db=await new Promise((resolve,reject)=>{const r=indexedDB.open(storagePrefix+'archive',2);r.onupgradeneeded=()=>{if(!r.result.objectStoreNames.contains('ops'))r.result.createObjectStore('ops',{keyPath:'id'});if(!r.result.objectStoreNames.contains('acks'))r.result.createObjectStore('acks',{keyPath:'id'});if(!r.result.objectStoreNames.contains('meta'))r.result.createObjectStore('meta',{keyPath:'id'});};r.onblocked=()=>{window.diaryBoot.phase='Chiudi le altre schede del diario e riprova';$('bootStatus').hidden=false;$('bootStatus').textContent=window.diaryBoot.phase;};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});
@@ -187,7 +206,8 @@ function detailRenderKey(){
 }
 function refreshSyncIndicators(){
  for(const card of $('view').querySelectorAll('.memory-card[data-open]')){
-  if(!pending(card.dataset.open))card.querySelector('.sync-pending')?.remove();
+  const badge=card.querySelector('.sync-pending');
+  if(badge&&!pending(card.dataset.open))badge.remove();
  }
  if(active&&$('memorySyncStatus'))$('memorySyncStatus').textContent=pending(active)?'Custodito qui, da condividere al prossimo collegamento':'Condiviso con l’altro diario';
  if(activeLetterId&&$('letterSyncStatus'))$('letterSyncStatus').textContent=pending(activeLetterId)?'La lettera arriverà nell’altro diario quando vi collegherete.':'La lettera è stata ricevuta anche dall’altro diario.';
@@ -612,21 +632,34 @@ async function receiveFrame(raw){
   if(message.protocol!==WIRE_VERSION||message.ticket!==sessionTicket||!sessionTicket||!Object.hasOwn(people,message.person)){closePeer();connection('Aggiorna l’app su entrambi i dispositivi prima di collegarli');return;}
   if(message.person===author){closePeer();connection('Entrambi i dispositivi sono di '+personName()+'. Assegna Persona 1 a un dispositivo e Persona 2 all’altro.');return;}
   if(!validInventory(message.inventory))throw Error('Elenco dei contenuti non valido');
-  channel.peerIds=new Set(message.inventory);
+  const current=channel;
+  current.peerIds=new Set(message.inventory);
   if(message.policy)await adoptPolicy(message.policy);
-  peerPerson=message.person;peerName=message.name||personName(peerPerson);clearTimeout(channel.helloTimer);
-  await store('meta',{id:'partner',person:peerPerson});connection('Collegato con '+peerName,true);
+  if(channel!==current||current.readyState!=='open')return;
+  peerPerson=message.person;
+  peerName=message.name||personName(peerPerson);
+  clearTimeout(current.helloTimer);
+  await store('meta',{id:'partner',person:peerPerson});
+  // Already present operations will not be resent and will not receive individual ACKs.
+  await confirmSharedOperations(current.peerIds);
+  if(channel!==current||current.readyState!=='open')return;
+  connection('Collegato con '+peerName,true);
   if(message.type==='hello')sendInBackground({type:'hello-ok',protocol:WIRE_VERSION,person:author,ticket:sessionTicket,policy:accessPolicy,inventory:operationIds()});
   // Never hold the receive queue while sending a snapshot or acknowledgements.
-  const current=channel;syncSnapshot().catch(error=>transferError(current,error));
+  syncSnapshot().catch(error=>transferError(current,error));
   return;
  }
  if(!peerPerson)throw Error('I profili non sono ancora stati verificati');
  if(message.type==='op'){const op=message.op;validateOp(op);await DiaryAccess.authorize(op,accessPolicy);if(!ops.some(o=>o.id===op.id)){await mergeOperations([op]);invalidateSync(channel);scheduleSyncRender();}sendInBackground({type:'ack',id:op.id});}
  if(message.type==='ack'){
-  if(!acks.has(message.id)&&ops.some(o=>o.id===message.id)){await store('acks',{id:message.id});acks.add(message.id);refreshSyncIndicators();}
-  const entry=channel.pendingAcks.get(message.id);
-  if(entry){channel.pendingAcks.delete(message.id);clearTimeout(entry.timer);entry.resolve(true);}
+  const current=channel;
+  if(!acks.has(message.id))await confirmSharedOperations(new Set([message.id]));
+  const entry=current.pendingAcks.get(message.id);
+  if(entry){
+   current.pendingAcks.delete(message.id);
+   clearTimeout(entry.timer);
+   entry.resolve(true);
+  }
  }
  if(message.type==='sync-done'){channel.receivedSnapshot=true;verifySync(channel);}
  if(message.type==='sync-check'){
@@ -635,12 +668,17 @@ async function receiveFrame(raw){
  }
  if(message.type==='sync-check-ok'){
   if(!validInventory(message.ids))throw Error('Conferma dei contenuti non valida');
+  const current=channel;
   const key=[...message.ids].sort().join('\n');
-  if(channel.sentSnapshot&&channel.receivedSnapshot&&!channel.inflight.size&&key===channel.checkKey&&key===operationIds().join('\n')&&!channel.transferFailed){
-   channel.verified=true;clearTimeout(channel.verifyTimer);
-   connection('Scambio completato · contenuti verificati su entrambi i dispositivi',true);
-   refreshSyncIndicators();
-  }
+  if(!current.sentSnapshot||!current.receivedSnapshot||current.inflight.size||
+   current.transferFailed||key!==current.checkKey||key!==operationIds().join('\n'))return;
+  await confirmSharedOperations(new Set(message.ids));
+  // A local edit or disconnect can happen while the transaction is committing.
+  if(channel!==current||current.readyState!=='open'||current.transferFailed||
+   current.inflight.size||key!==current.checkKey||key!==operationIds().join('\n'))return;
+  current.verified=true;
+  clearTimeout(current.verifyTimer);
+  connection('Scambio completato · contenuti verificati su entrambi i dispositivi',true);
  }
 }
 async function description(current=pc){if(!current||current!==pc)throw Error('Tentativo annullato');if(current.iceGatheringState!=='complete')await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('La rete non consente di preparare il collegamento')),12000);const listener=()=>{if(current!==pc){clearTimeout(timer);current.removeEventListener('icegatheringstatechange',listener);reject(Error('Tentativo annullato'));}else if(current.iceGatheringState==='complete'){clearTimeout(timer);current.removeEventListener('icegatheringstatechange',listener);resolve();}};current.addEventListener('icegatheringstatechange',listener);listener();});if(current!==pc)throw Error('Tentativo annullato');return current.localDescription.toJSON();}
