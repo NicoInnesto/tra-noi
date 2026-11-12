@@ -1,7 +1,7 @@
 'use strict';
 window.diaryBoot=window.diaryBoot||{phase:'Caricamento del diario',ready:false};
-const VERSION=56;
-const RELEASE='1.11';
+const VERSION=57;
+const RELEASE='1.12';
 const WIRE_VERSION=43;
 const uuid=()=>crypto.randomUUID?crypto.randomUUID():([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g,c=>(c^crypto.getRandomValues(new Uint8Array(1))[0]&15>>c/4).toString(16));
 const $=id=>document.getElementById(id);
@@ -144,8 +144,9 @@ async function init(){
  const storedIdentity=await new Promise((resolve,reject)=>{const r=db.transaction('meta').objectStore('meta').get('identity');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});
  const savedPerson=storedIdentity?.person||settingsStorage.getItem('diary-person');
  const request=requestedPerson();
- if(Object.hasOwn(people,savedPerson)){author=savedPerson;myName=personName();profileMismatch=!!request&&request!==author;setInstallManifest();}
+ if(Object.hasOwn(people,savedPerson)){author=savedPerson;myName=personName();profileMismatch=!!request&&request!==author;}
  else if(request)await choosePerson(request);
+ setInstallManifest();
  currentState();view=['home','ricordi','calendario','obiettivi','lettere','countdown','giochi','posti'].includes(location.hash.slice(1))?location.hash.slice(1):'home';
  window.diaryBoot.phase='Diario pronto';window.diaryBoot.ready=true;$('bootStatus').hidden=true;render();reportDiagnostic('page-ready',{version:VERSION});
  if(!window.isSecureContext)$('trialNote').hidden=false;
@@ -835,9 +836,25 @@ let profileMismatch=false,peerPerson='',syncStarted=false;
 function personName(person=author){const p=state?.profiles?.[person]||people[person];return p?[p.firstName,p.lastName].filter(Boolean).join(' '):myName;}
 function requestedPerson(){const p=new URL(location.href).searchParams.get('profilo');return Object.hasOwn(people,p)?p:null;}
 function setInstallManifest(){
- if(!Object.hasOwn(people,author))return;
- const href=new URL(location.href).searchParams.get('icona')==='nuova'?'manifest-icon.json':'manifest-'+author+'.json';document.querySelector('link[rel="manifest"]').href=href;
- const url=new URL(location.href);url.searchParams.set('profilo',author);url.searchParams.delete('struttura');url.searchParams.delete('prova');history.replaceState(null,'',url);
+ const url=new URL(location.href);
+ const icon=url.searchParams.get('icona');
+ const hasProfile=Object.hasOwn(people,author);
+ let manifest=hasProfile?'manifest-'+author+'.json':'manifest.json';
+ if(icon==='infinito'){
+  manifest='manifest-infinity.json';
+  document.querySelector('link[rel="apple-touch-icon"]').href='apple-touch-icon-infinity.png?v='+VERSION;
+  document.querySelector('link[rel="icon"]').href='icon-infinity.svg?v='+VERSION;
+  $('installIconLink').href='installazione.html';
+  $('installIconLink').textContent='Guida all’installazione';
+ }else if(icon==='nuova'){
+  manifest='manifest-icon.json';
+ }
+ document.querySelector('link[rel="manifest"]').href=manifest;
+ if(!hasProfile)return;
+ url.searchParams.set('profilo',author);
+ url.searchParams.delete('struttura');
+ url.searchParams.delete('prova');
+ history.replaceState(null,'',url);
 }
 async function choosePerson(person){
  if(!Object.hasOwn(people,person))throw Error('Scegli Persona 1 oppure Persona 2');

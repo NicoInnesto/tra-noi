@@ -1,7 +1,7 @@
 'use strict';
-// Release 1.11 (build 56): recover sharing confirmations from the partner inventory.
-const VERSION=56,BASE=new URL('./',self.location.href),CACHE='tra-noi-pages-'+BASE.pathname+'-v56';
-const relative=['index.html?v=56','style.css?v=56','boot.js?v=56','model.js?v=56','offline.js?v=56','link.js?v=56','interaction.js?v=56','access.js?v=56','preferences.js?v=56','viewport.js?v=56','app.js?v=56','places.js?v=56','backup.js?v=56','manifest.json','manifest-one.json','manifest-two.json','icon.svg?v=56','icon-192.png?v=56','icon-512.png?v=56','apple-touch-icon.png?v=56','vendor/qrcode.js','vendor/jsqr.js','installazione.html','nuova-icona.html','manifest-icon.json'];
+// Release 1.12 (build 57): an infinity icon for new installations.
+const VERSION=57,BASE=new URL('./',self.location.href),CACHE='tra-noi-pages-'+BASE.pathname+'-v57';
+const relative=['index.html?v=57','style.css?v=57','boot.js?v=57','model.js?v=57','offline.js?v=57','link.js?v=57','interaction.js?v=57','access.js?v=57','preferences.js?v=57','viewport.js?v=57','app.js?v=57','places.js?v=57','backup.js?v=57','manifest.json','manifest-one.json','manifest-two.json','icon.svg?v=57','icon-192.png?v=57','icon-512.png?v=57','apple-touch-icon.png?v=57','vendor/qrcode.js','vendor/jsqr.js','installazione.html','installazione.js?v=57','nuova-icona.html','manifest-icon.json','manifest-infinity.json','icon-infinity.svg?v=57','icon-infinity-192.png?v=57','icon-infinity-512.png?v=57','apple-touch-icon-infinity.png?v=57'];
 const ASSETS=relative.map(p=>new URL(p,BASE).href),SHELL=ASSETS[0];
 self.addEventListener('install',e=>e.waitUntil((async()=>{const cache=await caches.open(CACHE);await cache.addAll(ASSETS);await self.skipWaiting();})()));
 self.addEventListener('activate',e=>e.waitUntil((async()=>{for(const key of await caches.keys())if(key!==CACHE&&key.startsWith('tra-noi-pages-'+BASE.pathname+'-v'))await caches.delete(key);await self.clients.claim();})()));
